@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	isLowSignalStatus,
+	isTerminalFlightStatus,
 	normalizeFlightStatus,
 	preferKnownStatus,
 	shouldUseStatusFallback,
@@ -30,5 +31,12 @@ describe("flight-status utilities", () => {
 
 	test("preferKnownStatus accepts stronger candidate status", () => {
 		expect(preferKnownStatus("scheduled", "departed")).toBe("departed");
+	});
+
+	test("isTerminalFlightStatus handles known terminal statuses", () => {
+		expect(isTerminalFlightStatus("landed")).toBe(true);
+		expect(isTerminalFlightStatus(" Cancelled ")).toBe(true);
+		expect(isTerminalFlightStatus("arrived")).toBe(true);
+		expect(isTerminalFlightStatus("scheduled")).toBe(false);
 	});
 });

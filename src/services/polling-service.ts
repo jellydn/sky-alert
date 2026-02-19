@@ -2,7 +2,11 @@ import { eq } from "drizzle-orm";
 import { bot } from "../bot/instance.js";
 import { db } from "../db/index.js";
 import { flights, statusChanges, trackedFlights } from "../db/schema.js";
-import { preferKnownStatus, shouldUseStatusFallback } from "../utils/flight-status.js";
+import {
+	isTerminalFlightStatus,
+	preferKnownStatus,
+	shouldUseStatusFallback,
+} from "../utils/flight-status.js";
 import { logger } from "../utils/logger.js";
 import { isPollingEnabled } from "./api-budget.js";
 import { aviationstackApi } from "./aviationstack.js";
@@ -66,7 +70,8 @@ async function pollFlights() {
 		for (const flight of activeFlights) {
 			const scheduledDeparture = new Date(flight.scheduledDeparture);
 
-			if (flight.currentStatus === "landed" || flight.currentStatus === "cancelled") {
+			if (isTerminalFlightStatus(flight.currentStatus || undefined)) {
+				await db.update(flights).set({ isActive: false }).where(eq(flights.id, flight.id));
 				continue;
 			}
 
@@ -157,6 +162,7 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 		}
 
 		const finalStatus = preferKnownStatus(flight.currentStatus || undefined, nextStatus);
+		const isTerminalStatus = isTerminalFlightStatus(finalStatus);
 
 		const changes: { field: string; from: string; to: string }[] = [];
 
@@ -226,6 +232,7 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 				gate: nextGate,
 				terminal: nextTerminal,
 				delayMinutes: nextDelayMinutes,
+				isActive: !isTerminalStatus,
 				lastPolledAt: Math.floor(Date.now() / 1000),
 			})
 			.where(eq(flights.id, flightId));

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { isTerminalFlightStatus } from "../utils/flight-status.js";
 
 function shouldUseFallback(status: string, delayMinutes?: number): boolean {
 	return (!delayMinutes || delayMinutes <= 0) && (status === "scheduled" || status.length === 0);
@@ -102,17 +103,22 @@ describe("polling-service", () => {
 	describe("flight filtering - status checks", () => {
 		test("should identify landed status", () => {
 			const flight = { currentStatus: "landed" };
-			expect(flight.currentStatus === "landed" || flight.currentStatus === "cancelled").toBe(true);
+			expect(isTerminalFlightStatus(flight.currentStatus)).toBe(true);
 		});
 
 		test("should identify cancelled status", () => {
 			const flight = { currentStatus: "cancelled" };
-			expect(flight.currentStatus === "landed" || flight.currentStatus === "cancelled").toBe(true);
+			expect(isTerminalFlightStatus(flight.currentStatus)).toBe(true);
+		});
+
+		test("should identify arrived status", () => {
+			const flight = { currentStatus: "arrived" };
+			expect(isTerminalFlightStatus(flight.currentStatus)).toBe(true);
 		});
 
 		test("should identify active status", () => {
 			const flight = { currentStatus: "scheduled" };
-			expect(flight.currentStatus === "landed" || flight.currentStatus === "cancelled").toBe(false);
+			expect(isTerminalFlightStatus(flight.currentStatus)).toBe(false);
 		});
 	});
 

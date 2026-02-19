@@ -8,7 +8,11 @@ import { aviationstackApi } from "../services/aviationstack.js";
 import { getDelayMinutes, selectBestMatchingFlight } from "../services/flight-service.js";
 import { getFlightAwareFallback } from "../services/flightaware-fallback.js";
 import { getFlightStatsFallback } from "../services/flightstats-fallback.js";
-import { preferKnownStatus, shouldUseStatusFallback } from "../utils/flight-status.js";
+import {
+	isTerminalFlightStatus,
+	preferKnownStatus,
+	shouldUseStatusFallback,
+} from "../utils/flight-status.js";
 import { formatDateTime } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
 
@@ -86,8 +90,7 @@ bot.command("status", async (ctx: Context) => {
 
 		const lastPolled = flight.lastPolledAt ? flight.lastPolledAt * 1000 : 0;
 		const isStale = Date.now() - lastPolled >= STALE_THRESHOLD;
-		const isFlightActive =
-			flight.currentStatus !== "landed" && flight.currentStatus !== "cancelled";
+		const isFlightActive = !isTerminalFlightStatus(flight.currentStatus || undefined);
 		const hasLowSignalStatus = shouldUseStatusFallback(
 			flight.currentStatus || "",
 			flight.delayMinutes || undefined,
@@ -165,6 +168,7 @@ bot.command("status", async (ctx: Context) => {
 					}
 					const oldStatus = flight.currentStatus;
 					const finalStatus = preferKnownStatus(oldStatus || undefined, newStatus);
+					const isTerminalStatus = isTerminalFlightStatus(finalStatus);
 
 					if (oldStatus !== finalStatus && finalStatus) {
 						await db.insert(statusChanges).values({
@@ -181,6 +185,7 @@ bot.command("status", async (ctx: Context) => {
 							gate: nextGate,
 							terminal: nextTerminal,
 							delayMinutes: nextDelayMinutes,
+							isActive: !isTerminalStatus,
 							lastPolledAt: Math.floor(Date.now() / 1000),
 						})
 						.where(eq(flights.id, flight.id));
@@ -200,7 +205,10 @@ bot.command("status", async (ctx: Context) => {
 			}
 		}
 
-		if (isFlightActive) {
+		const shouldEnrichFromFallback = !isTerminalFlightStatus(
+			flight.currentStatus || displayStatus || undefined,
+		);
+		if (shouldEnrichFromFallback) {
 			const parsedCode = parseCarrierAndNumber(flight.flightNumber);
 			if (parsedCode.carrier && parsedCode.number) {
 				try {
@@ -237,6 +245,34 @@ bot.command("status", async (ctx: Context) => {
 				}
 			}
 		}
+
+		const finalDisplayStatus = preferKnownStatus(
+			flight.currentStatus || undefined,
+			displayStatus || undefined,
+		);
+		if (finalDisplayStatus && finalDisplayStatus !== (flight.currentStatus || undefined)) {
+			await db.insert(statusChanges).values({
+				flightId: flight.id,
+				oldStatus: flight.currentStatus,
+				newStatus: finalDisplayStatus,
+			});
+
+			await db
+				.update(flights)
+				.set({
+					currentStatus: finalDisplayStatus,
+					isActive: !isTerminalFlightStatus(finalDisplayStatus),
+				})
+				.where(eq(flights.id, flight.id));
+
+			const updated = await db.query.flights.findFirst({
+				where: eq(flights.id, flight.id),
+			});
+			if (updated) {
+				flight = updated;
+			}
+		}
+		displayStatus = finalDisplayStatus || displayStatus;
 
 		const changes = await db
 			.select()

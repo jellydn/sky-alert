@@ -1,4 +1,5 @@
 const LOW_SIGNAL_STATUSES = new Set(["scheduled", "unknown", "n/a", "na", "unavailable"]);
+const TERMINAL_STATUSES = new Set(["landed", "cancelled", "canceled", "arrived", "completed"]);
 
 export function normalizeFlightStatus(status?: string): string | undefined {
 	if (!status) {
@@ -20,6 +21,15 @@ export function isLowSignalStatus(status?: string): boolean {
 
 export function shouldUseStatusFallback(status?: string, delayMinutes?: number): boolean {
 	return (!delayMinutes || delayMinutes <= 0) && isLowSignalStatus(status);
+}
+
+export function isTerminalFlightStatus(status?: string): boolean {
+	const normalized = normalizeFlightStatus(status);
+	if (!normalized) {
+		return false;
+	}
+
+	return TERMINAL_STATUSES.has(normalized);
 }
 
 export function preferKnownStatus(
