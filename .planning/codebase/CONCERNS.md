@@ -15,6 +15,7 @@
 - Aviationstack cache now has a bounded size cap.
 - Startup DB failure fixed by ensuring `./data` directory exists before SQLite open.
 - `just` DB commands now use local drizzle-kit binary; migrate works reliably.
+- Fallback precedence stabilized: FlightStats is now preferred for low-signal live refresh, with FlightAware only as secondary fallback.
 
 ### Partial
 - API usage race risk reduced with `onConflictDoNothing` in month record creation, but usage accounting is still eventually consistent under high concurrency.
@@ -77,6 +78,10 @@
 - Files: `src/services/aviationstack.ts`
 - Status: Now bounded by max entries, but eviction is FIFO by insertion order (not true LRU)
 - Next fix: Implement LRU or TTL+size strategy with explicit metrics
+
+**Fallback Source Consistency (Resolved)**
+- Files: `src/handlers/status.ts`, `src/services/polling-service.ts`
+- Resolution: Unified low-signal fallback precedence (FlightStats first, FlightAware second) and aligned display/update fields for delay/status/gate/terminal.
 
 ## Scaling Limits
 

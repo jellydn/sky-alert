@@ -15,7 +15,7 @@
 - **Adaptive polling** — every 15 min (far), 5 min (near), 1 min (imminent)
 - **Multi-user** — multiple users can track the same flight with deduplicated API calls
 - **Auto-cleanup** — expired flights are deactivated and removed automatically
-- **Live refresh fallback** — uses FlightAware parsing when Aviationstack returns low-signal status data
+- **Live refresh fallback** — FlightStats-first enrichment, then FlightAware as secondary fallback when data is still low-signal
 
 ## Tech Stack
 
@@ -113,7 +113,7 @@ The bot also understands natural language:
    Aviationstack API
           │
           ▼ (fallback when needed)
-     FlightAware page parser
+ FlightStats parser + FlightAware parser
 ```
 
 ## Status Refresh, Timeout, and Fallback Rules
@@ -141,13 +141,14 @@ The bot also understands natural language:
 ### Fallback behavior
 
 - Primary source is Aviationstack
-- Fallback to FlightAware is used only when Aviationstack is low-signal:
+- Fallback is triggered only when Aviationstack is low-signal:
 - Status is `scheduled` or empty, and delay is missing/non-positive
-- Fallback tries multiple identifiers (`ICAO`, `IATA`, user input), e.g. `TGW315` then `TR315`
-- If fallback provides delay, `/status` shows:
-- `Status: delayed` (if no stronger status from primary)
-- `Delay: X min`
-- `Estimated` departure and arrival times (scheduled + delay)
+- Fallback order:
+- 1) FlightStats (status, delay, estimated departure/arrival, terminal, gate)
+- 2) FlightAware only if status/delay are still low-signal after FlightStats
+- `/status` display prefers live fallback estimated times over derived `scheduled + delay`
+- `/status` also shows arrival terminal/gate when available from fallback data
+- FlightAware fallback tries multiple identifiers (`ICAO`, `IATA`, user input), e.g. `TGW315` then `TR315`
 
 ### Known limitations
 

@@ -7,6 +7,7 @@ import { isPollingEnabled } from "./api-budget.js";
 import { aviationstackApi } from "./aviationstack.js";
 import { getDelayMinutes, selectBestMatchingFlight } from "./flight-service.js";
 import { getFlightAwareFallback } from "./flightaware-fallback.js";
+import { getFlightStatsFallback } from "./flightstats-fallback.js";
 
 const POLL_INTERVAL_FAR = 15 * 60 * 1000;
 const POLL_INTERVAL_NEAR = 5 * 60 * 1000;
@@ -17,6 +18,15 @@ let pollingTimer: ReturnType<typeof setInterval> | null = null;
 
 function shouldUseFallback(status: string, delayMinutes?: number): boolean {
 	return (!delayMinutes || delayMinutes <= 0) && (status === "scheduled" || status.length === 0);
+}
+
+function parseCarrierAndNumber(flightCode: string): { carrier?: string; number?: string } {
+	const match = flightCode.match(/^([A-Z]{2,3})(\d{1,4})$/);
+	if (!match) {
+		return {};
+	}
+
+	return { carrier: match[1], number: match[2] };
 }
 
 export function startPollingWorker() {
@@ -105,18 +115,47 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 		}
 		let nextDelayMinutes = getDelayMinutes(apiFlight);
 		let nextStatus = apiFlight.flight_status;
+		let nextGate = apiFlight.departure.gate || undefined;
+		let nextTerminal = apiFlight.departure.terminal || undefined;
+		let flightStatsFallbackUsed = false;
 
 		if (shouldUseFallback(nextStatus, nextDelayMinutes)) {
-			const fallback = await getFlightAwareFallback(
-				[apiFlight.flight.icao, apiFlight.flight.iata, flightNumber],
-				flight.origin,
-				flight.destination,
-			);
-			if (fallback?.delayMinutes && fallback.delayMinutes > 0) {
-				nextDelayMinutes = fallback.delayMinutes;
+			const parsedCode = parseCarrierAndNumber(flightNumber);
+			const carrierCode =
+				apiFlight.airline.iata || parsedCode.carrier || apiFlight.flight.iata.slice(0, 2);
+			const flightNo = apiFlight.flight.number || parsedCode.number || "";
+			const flightStatsFallback = flightNo
+				? await getFlightStatsFallback(carrierCode, flightNo)
+				: undefined;
+
+			if (flightStatsFallback) {
+				flightStatsFallbackUsed = true;
+				if (flightStatsFallback.delayMinutes && flightStatsFallback.delayMinutes > 0) {
+					nextDelayMinutes = flightStatsFallback.delayMinutes;
+				}
+				if (flightStatsFallback.status && shouldUseFallback(nextStatus, nextDelayMinutes)) {
+					nextStatus = flightStatsFallback.status;
+				}
+				if (flightStatsFallback.departureGate) {
+					nextGate = flightStatsFallback.departureGate;
+				}
+				if (flightStatsFallback.departureTerminal) {
+					nextTerminal = flightStatsFallback.departureTerminal;
+				}
 			}
-			if (fallback?.status && (nextStatus === "scheduled" || nextStatus.length === 0)) {
-				nextStatus = fallback.status;
+
+			if (!flightStatsFallbackUsed || shouldUseFallback(nextStatus, nextDelayMinutes)) {
+				const fallback = await getFlightAwareFallback(
+					[apiFlight.flight.icao, apiFlight.flight.iata, flightNumber],
+					flight.origin,
+					flight.destination,
+				);
+				if (fallback?.delayMinutes && fallback.delayMinutes > 0) {
+					nextDelayMinutes = fallback.delayMinutes;
+				}
+				if (fallback?.status && shouldUseFallback(nextStatus, nextDelayMinutes)) {
+					nextStatus = fallback.status;
+				}
 			}
 		}
 
@@ -135,19 +174,19 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 			});
 		}
 
-		if (flight.gate !== apiFlight.departure.gate && apiFlight.departure.gate) {
+		if (flight.gate !== nextGate && nextGate) {
 			changes.push({
 				field: "Gate",
 				from: flight.gate || "N/A",
-				to: apiFlight.departure.gate,
+				to: nextGate,
 			});
 		}
 
-		if (flight.terminal !== apiFlight.departure.terminal && apiFlight.departure.terminal) {
+		if (flight.terminal !== nextTerminal && nextTerminal) {
 			changes.push({
 				field: "Terminal",
 				from: flight.terminal || "N/A",
-				to: apiFlight.departure.terminal,
+				to: nextTerminal,
 			});
 		}
 
@@ -185,8 +224,8 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 			.update(flights)
 			.set({
 				currentStatus: nextStatus,
-				gate: apiFlight.departure.gate || undefined,
-				terminal: apiFlight.departure.terminal || undefined,
+				gate: nextGate,
+				terminal: nextTerminal,
 				delayMinutes: nextDelayMinutes,
 				lastPolledAt: Math.floor(Date.now() / 1000),
 			})
