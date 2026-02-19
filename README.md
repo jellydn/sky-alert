@@ -1,8 +1,12 @@
-# ![SkyAlert Logo](logo.svg)
+# Welcome to SkyAlert 👋
 
-## ✈️ SkyAlert
+![Version](https://img.shields.io/badge/version-0.1.0-blue.svg?cacheSeconds=2592000)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/jellydn/sky-alert/blob/main/LICENSE)
+[![Twitter: jellydn](https://img.shields.io/twitter/follow/jellydn.svg?style=social)](https://twitter.com/jellydn)
 
-Real-time flight monitoring Telegram bot. Track flights, get instant alerts on delays, gate changes, boarding, and more.
+> Real-time flight monitoring Telegram bot. Track flights, get instant alerts on delays, gate changes, boarding, and more.
+
+![SkyAlert Logo](logo.svg)
 
 ## Features
 
@@ -18,7 +22,7 @@ Real-time flight monitoring Telegram bot. Track flights, get instant alerts on d
 - **SQLite** (via better-sqlite3 or Drizzle)
 - **[Aviationstack API](https://aviationstack.com/)** for flight data
 
-## Setup
+## Install
 
 ```bash
 # Install dependencies
@@ -27,9 +31,26 @@ bun install
 # Configure environment
 cp .env.example .env
 # Set BOT_TOKEN and AVIATIONSTACK_API_KEY in .env
+```
 
-# Run
+## Usage
+
+```bash
+# Run the bot
 bun run start
+```
+
+## Develop
+
+```bash
+# Run in development mode
+bun run dev
+
+# Type-check
+bun run typecheck
+
+# Lint
+bun run lint
 ```
 
 ## Environment Variables
@@ -77,6 +98,22 @@ The bot also understands natural language:
    Aviationstack API
 ```
 
+## Author
+
+👤 **Huynh Duc Dung**
+
+- Website: https://productsway.com/
+- Twitter: [@jellydn](https://twitter.com/jellydn)
+- Github: [@jellydn](https://github.com/jellydn)
+
+## Show your support
+
+Give a ⭐️ if this project helped you!
+
+[![ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/dunghd)
+[![paypal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/dunghd)
+[![buymeacoffee](https://img.shields.io/badge/Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/dunghd)
+
 ## License
 
-MIT
+MIT © [Huynh Duc Dung](https://productsway.com/)
