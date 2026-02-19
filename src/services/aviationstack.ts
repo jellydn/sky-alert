@@ -127,10 +127,7 @@ export class AviationstackAPI {
 		return (await response.json()) as AviationstackResponse;
 	}
 
-	async getFlightsByNumber(
-		flightNumber: string,
-		date: string,
-	): Promise<AviationstackFlight[]> {
+	async getFlightsByNumber(flightNumber: string, date: string): Promise<AviationstackFlight[]> {
 		const cacheKey = `flights:${flightNumber}:${date}`;
 		const cached = this.getCached<AviationstackFlight[]>(cacheKey);
 		if (cached !== undefined) return cached;

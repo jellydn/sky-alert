@@ -10,10 +10,7 @@ const pendingSelections = new Map<string, PendingRouteSelection>();
 
 const SELECTION_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
-export function setPendingSelection(
-	chatId: string,
-	flights: AviationstackFlight[],
-) {
+export function setPendingSelection(chatId: string, flights: AviationstackFlight[]) {
 	pendingSelections.set(chatId, {
 		chatId,
 		flights,
@@ -25,9 +22,7 @@ export function setPendingSelection(
 	}, SELECTION_TIMEOUT);
 }
 
-export function getPendingSelection(
-	chatId: string,
-): PendingRouteSelection | undefined {
+export function getPendingSelection(chatId: string): PendingRouteSelection | undefined {
 	const selection = pendingSelections.get(chatId);
 	if (!selection) {
 		return undefined;

@@ -253,8 +253,7 @@ describe("status handler", () => {
 
 	describe("error handling", () => {
 		test("should handle database errors gracefully", () => {
-			const errorMessage =
-				"❌ Failed to retrieve flight status. Please try again later.";
+			const errorMessage = "❌ Failed to retrieve flight status. Please try again later.";
 
 			expect(errorMessage).toContain("Failed to retrieve");
 			expect(errorMessage).toContain("try again later");

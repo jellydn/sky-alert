@@ -35,11 +35,7 @@ bot.on("message:text", async (ctx: Context) => {
 		);
 
 		try {
-			const flights = await api.getFlightsByRoute(
-				parsed.origin,
-				parsed.destination,
-				date,
-			);
+			const flights = await api.getFlightsByRoute(parsed.origin, parsed.destination, date);
 
 			if (flights.length === 0) {
 				await ctx.reply(
@@ -83,9 +79,7 @@ bot.on("message:text", async (ctx: Context) => {
 	if (pendingSelection) {
 		const selectionNumber = parseInt(message.trim(), 10);
 		const isValidSelection =
-			!Number.isNaN(selectionNumber) &&
-			selectionNumber >= 1 &&
-			selectionNumber <= 5;
+			!Number.isNaN(selectionNumber) && selectionNumber >= 1 && selectionNumber <= 5;
 
 		if (!isValidSelection) {
 			clearPendingSelection(chatId);
@@ -117,10 +111,7 @@ bot.on("message:text", async (ctx: Context) => {
 		await ctx.reply("🔍 Looking up flight...");
 
 		try {
-			const apiFlights = await api.getFlightsByNumber(
-				parsed.flightNumber,
-				parsed.date,
-			);
+			const apiFlights = await api.getFlightsByNumber(parsed.flightNumber, parsed.date);
 
 			if (apiFlights.length === 0) {
 				await ctx.reply(
@@ -133,10 +124,7 @@ bot.on("message:text", async (ctx: Context) => {
 
 			if (apiFlights.length > 1) {
 				const limitedFlights = apiFlights.slice(0, 5);
-				const message = formatFlightListMessage(
-					limitedFlights,
-					parsed.flightNumber,
-				);
+				const message = formatFlightListMessage(limitedFlights, parsed.flightNumber);
 				await ctx.reply(message, { parse_mode: "Markdown" });
 				setPendingSelection(chatId, limitedFlights);
 				return;

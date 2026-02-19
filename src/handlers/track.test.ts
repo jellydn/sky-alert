@@ -116,8 +116,7 @@ describe("track handler", () => {
 
 			await import("./track.js");
 
-			const expectedErrorMessage =
-				"❌ *Invalid format*\n\nUsage: `/track <flight_number> <date>`";
+			const expectedErrorMessage = "❌ *Invalid format*\n\nUsage: `/track <flight_number> <date>`";
 			expect(expectedErrorMessage).toContain("Invalid format");
 		});
 
@@ -194,8 +193,7 @@ describe("track handler", () => {
 		});
 
 		test("should handle invalid API key error", () => {
-			const errorMessage =
-				"❌ *Configuration error*\n\nInvalid Aviationstack API key.";
+			const errorMessage = "❌ *Configuration error*\n\nInvalid Aviationstack API key.";
 
 			expect(errorMessage).toContain("Configuration error");
 			expect(errorMessage).toContain("Invalid Aviationstack API key");
@@ -236,9 +234,7 @@ describe("track handler", () => {
 
 		test("should show tracking note when already tracking", () => {
 			const alreadyTracking = true;
-			const trackingNote = alreadyTracking
-				? "ℹ️ You were already tracking this flight.\n\n"
-				: "";
+			const trackingNote = alreadyTracking ? "ℹ️ You were already tracking this flight.\n\n" : "";
 
 			expect(trackingNote).toContain("already tracking");
 		});

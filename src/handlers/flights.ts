@@ -63,8 +63,6 @@ bot.command("flights", async (ctx: Context) => {
 		await ctx.reply(message, { parse_mode: "Markdown" });
 	} catch (error) {
 		logger.error("Error listing flights:", error);
-		await ctx.reply(
-			"❌ Failed to retrieve your flights. Please try again later.",
-		);
+		await ctx.reply("❌ Failed to retrieve your flights. Please try again later.");
 	}
 });

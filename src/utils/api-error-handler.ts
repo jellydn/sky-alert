@@ -1,9 +1,6 @@
 import type { Context } from "grammy";
 
-export async function handleApiError(
-	ctx: Context,
-	error: unknown,
-): Promise<void> {
+export async function handleApiError(ctx: Context, error: unknown): Promise<void> {
 	if (!(error instanceof Error)) {
 		await ctx.reply("❌ An unexpected error occurred. Please try again later.");
 		return;

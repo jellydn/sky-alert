@@ -100,9 +100,7 @@ export async function saveAndConfirmFlight(
 
 	const alreadyTracking = await trackFlight(chatId, flightId);
 
-	const trackingNote = alreadyTracking
-		? "ℹ️ You were already tracking this flight.\n\n"
-		: "";
+	const trackingNote = alreadyTracking ? "ℹ️ You were already tracking this flight.\n\n" : "";
 
 	await ctx.reply(
 		`${trackingNote}✅ *Flight Tracked Successfully*\n\n` +

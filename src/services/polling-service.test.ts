@@ -8,8 +8,7 @@ describe("polling-service", () => {
 		test("should calculate hours until departure correctly for imminent flights (< 1 hour)", () => {
 			const now = new Date("2026-02-19T14:00:00Z");
 			const scheduledDeparture = new Date("2026-02-19T14:30:00Z");
-			const hoursUntilDeparture =
-				(scheduledDeparture.getTime() - now.getTime()) / (60 * 60 * 1000);
+			const hoursUntilDeparture = (scheduledDeparture.getTime() - now.getTime()) / (60 * 60 * 1000);
 
 			expect(hoursUntilDeparture).toBeLessThanOrEqual(1);
 		});
@@ -17,8 +16,7 @@ describe("polling-service", () => {
 		test("should calculate hours until departure correctly for near flights (1-3 hours)", () => {
 			const now = new Date("2026-02-19T12:00:00Z");
 			const scheduledDeparture = new Date("2026-02-19T14:30:00Z");
-			const hoursUntilDeparture =
-				(scheduledDeparture.getTime() - now.getTime()) / (60 * 60 * 1000);
+			const hoursUntilDeparture = (scheduledDeparture.getTime() - now.getTime()) / (60 * 60 * 1000);
 
 			expect(hoursUntilDeparture).toBeGreaterThan(1);
 			expect(hoursUntilDeparture).toBeLessThanOrEqual(3);
@@ -27,8 +25,7 @@ describe("polling-service", () => {
 		test("should calculate hours until departure correctly for far flights (> 3 hours)", () => {
 			const now = new Date("2026-02-19T08:00:00Z");
 			const scheduledDeparture = new Date("2026-02-19T14:30:00Z");
-			const hoursUntilDeparture =
-				(scheduledDeparture.getTime() - now.getTime()) / (60 * 60 * 1000);
+			const hoursUntilDeparture = (scheduledDeparture.getTime() - now.getTime()) / (60 * 60 * 1000);
 
 			expect(hoursUntilDeparture).toBeGreaterThan(3);
 		});
@@ -48,8 +45,7 @@ describe("polling-service", () => {
 		test("should calculate hours until departure correctly for distant flights (> 6 hours)", () => {
 			const now = new Date("2026-02-19T10:00:00Z");
 			const scheduledDeparture = new Date("2026-02-19T18:00:00Z");
-			const hoursUntilDeparture =
-				(scheduledDeparture.getTime() - now.getTime()) / (60 * 60 * 1000);
+			const hoursUntilDeparture = (scheduledDeparture.getTime() - now.getTime()) / (60 * 60 * 1000);
 			const HOURS_BEFORE_START_POLLING = 6;
 
 			expect(hoursUntilDeparture).toBeGreaterThan(HOURS_BEFORE_START_POLLING);

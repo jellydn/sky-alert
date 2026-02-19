@@ -18,12 +18,8 @@ export function startCleanupWorker() {
 async function cleanupFlights() {
 	try {
 		const now = new Date();
-		const twentyFourHoursAgo = new Date(
-			now.getTime() - HOURS_TO_MARK_INACTIVE * 60 * 60 * 1000,
-		);
-		const sevenDaysAgo = new Date(
-			now.getTime() - HOURS_TO_DELETE * 60 * 60 * 1000,
-		);
+		const twentyFourHoursAgo = new Date(now.getTime() - HOURS_TO_MARK_INACTIVE * 60 * 60 * 1000);
+		const sevenDaysAgo = new Date(now.getTime() - HOURS_TO_DELETE * 60 * 60 * 1000);
 
 		const flightsToMarkInactive = await db
 			.select()
@@ -36,14 +32,8 @@ async function cleanupFlights() {
 			);
 
 		for (const flight of flightsToMarkInactive) {
-			if (
-				flight.currentStatus === "landed" ||
-				flight.currentStatus === "cancelled"
-			) {
-				await db
-					.update(flights)
-					.set({ isActive: false })
-					.where(eq(flights.id, flight.id));
+			if (flight.currentStatus === "landed" || flight.currentStatus === "cancelled") {
+				await db.update(flights).set({ isActive: false }).where(eq(flights.id, flight.id));
 				logger.info(`✓ Marked flight ${flight.flightNumber} as inactive`);
 			}
 		}

@@ -64,9 +64,7 @@ describe("AviationstackAPI", () => {
 					constructor() {
 						this.apiKey = process.env.AVIATIONSTACK_API_KEY || "";
 						if (!this.apiKey) {
-							throw new Error(
-								"AVIATIONSTACK_API_KEY environment variable is required",
-							);
+							throw new Error("AVIATIONSTACK_API_KEY environment variable is required");
 						}
 					}
 				};
@@ -92,9 +90,7 @@ describe("AviationstackAPI", () => {
 				],
 			};
 
-			const matching = responseWithMixedDates.data.filter(
-				(f) => f.flight_date === date,
-			);
+			const matching = responseWithMixedDates.data.filter((f) => f.flight_date === date);
 
 			expect(matching).toHaveLength(1);
 			expect(matching[0].flight_date).toBe(date);
@@ -110,9 +106,7 @@ describe("AviationstackAPI", () => {
 				],
 			};
 
-			const matching = responseWithSameDates.data.filter(
-				(f) => f.flight_date === date,
-			);
+			const matching = responseWithSameDates.data.filter((f) => f.flight_date === date);
 
 			expect(matching).toHaveLength(2);
 		});
@@ -127,9 +121,7 @@ describe("AviationstackAPI", () => {
 				],
 			};
 
-			const matching = responseWithDifferentDates.data.filter(
-				(f) => f.flight_date === date,
-			);
+			const matching = responseWithDifferentDates.data.filter((f) => f.flight_date === date);
 
 			expect(matching).toHaveLength(0);
 		});
@@ -182,10 +174,8 @@ describe("AviationstackAPI", () => {
 			const now = Date.now();
 
 			const entryTimestamp = now;
-			const isExpiredAfterTtl =
-				now + CACHE_TTL + 1000 - entryTimestamp > CACHE_TTL;
-			const isNotExpiredBeforeTtl =
-				now + CACHE_TTL - 1000 - entryTimestamp > CACHE_TTL;
+			const isExpiredAfterTtl = now + CACHE_TTL + 1000 - entryTimestamp > CACHE_TTL;
+			const isNotExpiredBeforeTtl = now + CACHE_TTL - 1000 - entryTimestamp > CACHE_TTL;
 
 			expect(isExpiredAfterTtl).toBe(true);
 			expect(isNotExpiredBeforeTtl).toBe(false);

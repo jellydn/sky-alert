@@ -15,9 +15,7 @@ export function parseFlightInput(message: string): ParsedFlightInput {
 	const flightNumberMatch = cleanedMessage.match(FLIGHT_NUMBER_PATTERN);
 	const routeMatch = cleanedMessage.match(ROUTE_PATTERN);
 
-	const flightNumber = flightNumberMatch
-		? flightNumberMatch[1].toUpperCase()
-		: null;
+	const flightNumber = flightNumberMatch ? flightNumberMatch[1].toUpperCase() : null;
 	const isRoute = routeMatch !== null;
 
 	const result: ParsedFlightInput = {
@@ -61,9 +59,7 @@ export function parseDate(message: string): string | null {
 		return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 	}
 
-	const slashDateMatchShort = message.match(
-		/(\d{1,2})[/-](\d{1,2})[/-](\d{2})/,
-	);
+	const slashDateMatchShort = message.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{2})/);
 	if (slashDateMatchShort) {
 		const [, day, month, year] = slashDateMatchShort;
 		const fullYear = parseInt(year, 10) < 50 ? `20${year}` : `19${year}`;
@@ -87,9 +83,7 @@ export function parseDate(message: string): string | null {
 
 	for (let i = 0; i < monthNames.length; i++) {
 		if (lowerMessage.includes(monthNames[i])) {
-			const dayMatch = lowerMessage.match(
-				new RegExp(`${monthNames[i]}\\s*(\\d{1,2})`),
-			);
+			const dayMatch = lowerMessage.match(new RegExp(`${monthNames[i]}\\s*(\\d{1,2})`));
 			if (dayMatch) {
 				const yearMatch = lowerMessage.match(/(\d{4})/);
 				const year = yearMatch ? yearMatch[1] : now.getFullYear();
@@ -98,15 +92,7 @@ export function parseDate(message: string): string | null {
 		}
 	}
 
-	const dayNames = [
-		"sunday",
-		"monday",
-		"tuesday",
-		"wednesday",
-		"thursday",
-		"friday",
-		"saturday",
-	];
+	const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
 	if (lowerMessage.includes("next ")) {
 		const nextDay = lowerMessage.match(/next\s+(\w+)/i);

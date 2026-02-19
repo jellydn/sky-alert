@@ -25,8 +25,7 @@ export function startPollingWorker() {
 }
 
 function getPollInterval(scheduledDeparture: Date, now: Date): number {
-	const hoursUntilDeparture =
-		(scheduledDeparture.getTime() - now.getTime()) / (60 * 60 * 1000);
+	const hoursUntilDeparture = (scheduledDeparture.getTime() - now.getTime()) / (60 * 60 * 1000);
 
 	if (hoursUntilDeparture <= 1) return POLL_INTERVAL_IMMINENT;
 	if (hoursUntilDeparture <= 3) return POLL_INTERVAL_NEAR;
@@ -36,22 +35,14 @@ function getPollInterval(scheduledDeparture: Date, now: Date): number {
 async function pollFlights() {
 	try {
 		const now = new Date();
-		const sixHoursFromNow = new Date(
-			now.getTime() + HOURS_BEFORE_START_POLLING * 60 * 60 * 1000,
-		);
+		const sixHoursFromNow = new Date(now.getTime() + HOURS_BEFORE_START_POLLING * 60 * 60 * 1000);
 
-		const activeFlights = await db
-			.select()
-			.from(flights)
-			.where(eq(flights.isActive, true));
+		const activeFlights = await db.select().from(flights).where(eq(flights.isActive, true));
 
 		for (const flight of activeFlights) {
 			const scheduledDeparture = new Date(flight.scheduledDeparture);
 
-			if (
-				flight.currentStatus === "landed" ||
-				flight.currentStatus === "cancelled"
-			) {
+			if (flight.currentStatus === "landed" || flight.currentStatus === "cancelled") {
 				continue;
 			}
 
@@ -74,17 +65,9 @@ async function pollFlights() {
 	}
 }
 
-async function pollFlight(
-	flightId: number,
-	flightNumber: string,
-	flightDate: string,
-) {
+async function pollFlight(flightId: number, flightNumber: string, flightDate: string) {
 	try {
-		const currentFlight = await db
-			.select()
-			.from(flights)
-			.where(eq(flights.id, flightId))
-			.limit(1);
+		const currentFlight = await db.select().from(flights).where(eq(flights.id, flightId)).limit(1);
 
 		if (currentFlight.length === 0) {
 			return;
@@ -122,10 +105,7 @@ async function pollFlight(
 			});
 		}
 
-		if (
-			flight.terminal !== apiFlight.departure.terminal &&
-			apiFlight.departure.terminal
-		) {
+		if (flight.terminal !== apiFlight.departure.terminal && apiFlight.departure.terminal) {
 			changes.push({
 				field: "Terminal",
 				from: flight.terminal || "N/A",

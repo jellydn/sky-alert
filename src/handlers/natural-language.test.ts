@@ -162,9 +162,7 @@ describe("natural-language handler patterns and messages", () => {
 
 		test("should detect absence of date keyword in message", () => {
 			const message = "SFO to LAX";
-			const hasDateKeyword = /\b(today|tomorrow|\d{4}-\d{2}-\d{2})\b/i.test(
-				message,
-			);
+			const hasDateKeyword = /\b(today|tomorrow|\d{4}-\d{2}-\d{2})\b/i.test(message);
 
 			expect(hasDateKeyword).toBe(false);
 		});
@@ -293,8 +291,7 @@ describe("natural-language handler patterns and messages", () => {
 
 	describe("error message formatting", () => {
 		test("should format rate limit message correctly", () => {
-			const rateLimitMessage =
-				"⚠️ *Rate limit exceeded*\n\nPlease try again later.";
+			const rateLimitMessage = "⚠️ *Rate limit exceeded*\n\nPlease try again later.";
 
 			expect(rateLimitMessage).toContain("Rate limit exceeded");
 			expect(rateLimitMessage).toContain("try again later");

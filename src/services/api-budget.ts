@@ -18,10 +18,7 @@ async function getOrCreateMonthRecord() {
 
 	if (existing) return existing;
 
-	const result = await db
-		.insert(apiUsage)
-		.values({ month, requestCount: 0 })
-		.returning();
+	const result = await db.insert(apiUsage).values({ month, requestCount: 0 }).returning();
 
 	return result[0];
 }
