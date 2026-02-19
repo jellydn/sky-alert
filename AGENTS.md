@@ -1,152 +1,121 @@
 # AGENTS.md - SkyAlert Project Guidelines
 
-Guidelines for agentic coding agents operating in this repository.
-
-## Project Overview
-
-SkyAlert is a real-time flight monitoring Telegram bot built with TypeScript. It tracks flights, polls for status changes, and sends proactive alerts to users.
-
-**Tech Stack**: TypeScript, grammY (Telegram), SQLite (better-sqlite3), Drizzle ORM, Aviationstack API
+SkyAlert is a real-time flight monitoring Telegram bot. **Tech Stack**: TypeScript, grammY (Telegram), SQLite (better-sqlite3), Drizzle ORM, Aviationstack API
 
 ---
 
-## Build, Lint, and Test Commands
-
-### Development
+## Commands
 
 ```bash
-bun run dev          # Run development server (bun run src/index.ts)
-bun run start        # Run production build (node dist/index.js)
-```
+# Development
+bun run dev          # Run dev server (bun run src/index.ts)
+bun run start        # Run production build
 
-### Build
-
-```bash
+# Build & Lint
 bun run build        # Compile TypeScript to dist/
-bun run typecheck    # Type-check without emitting files
-```
-
-### Linting
-
-```bash
-bun run lint         # Run Biome linter on all files
+bun run typecheck    # Type-check without emitting
+bun run lint         # Run Biome linter
 bunx biome check . --fix   # Auto-fix lint issues
-bunx biome format . --write # Format all files
-```
 
-### Database
-
-```bash
+# Database
 bun run db:generate  # Generate Drizzle migrations
 bun run db:migrate   # Run migrations
-bun run db:studio    # Open Drizzle Studio
-```
 
-### Testing
-
-No test framework is configured yet. When adding tests, use Vitest:
-
-```bash
-bun test                      # Run all tests
+# Testing (install Vitest first: bun add -d vitest)
+bun test                           # Run all tests
 bun test src/path/to/file.test.ts  # Run single test file
-bun test --watch              # Watch mode
 ```
 
 ---
 
-## Code Style Guidelines
+## Code Style
 
 ### Imports
 
-- Use ES module syntax with `import`/`export`
-- Always include `.js` extension in local imports (required for ES modules)
-- Group imports: external packages first, then internal modules
-- Use double quotes for import paths
+- ES module syntax with `import`/`export`
+- **Always include `.js` extension in local imports** (required for ES modules)
+- Use `import type` for type-only imports
+- Group: external packages first, then internal modules
 
 ```typescript
-// External packages
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import path from "path";
-
-// Internal modules (note .js extension)
-import * as schema from "./schema.js";
+import type { Context } from "grammy";
+import { and, eq } from "drizzle-orm";
+import { bot } from "../bot/index.js";
+import { flights } from "../db/schema.js";
 ```
 
 ### Formatting
 
-- Tab indentation (Biome default)
-- No semicolons at statement endings
-- Double quotes for strings
-- Trailing commas in multiline structures
-- Max line width: 80 characters (configure in biome.json if needed)
+- Tab indentation, no semicolons, double quotes, trailing commas in multiline
 
 ### TypeScript
 
-- Strict mode is enabled - no `any` without justification
+- Strict mode - no `any` without justification
 - Prefer explicit return types for exported functions
-- Use `type` for type definitions, `interface` for object shapes that may be extended
-- Use `satisfies` operator for type-safe config objects
-- Prefer `const` assertions for literal types
-
-```typescript
-export default {
-  schema: "./src/db/schema.ts",
-} satisfies Config;
-```
+- Use `type` for type definitions, `interface` for extensible object shapes
+- Use `satisfies` for type-safe config objects
 
 ### Naming Conventions
 
-| Element          | Convention           | Example                               |
-| ---------------- | -------------------- | ------------------------------------- |
-| Variables        | camelCase            | `flightNumber`, `chatId`              |
-| Functions        | camelCase            | `parseFlightInput()`, `sendAlert()`   |
-| Types/Interfaces | PascalCase           | `FlightStatus`, `BotContext`          |
-| Database tables  | camelCase            | `flights`, `trackedFlights`           |
-| Constants        | SCREAMING_SNAKE_CASE | `MAX_RETRIES`, `API_BASE_URL`         |
-| File names       | kebab-case           | `flight-service.ts`, `date-parser.ts` |
+| Element          | Convention           | Example                              |
+| ---------------- | -------------------- | ------------------------------------ |
+| Variables/Funcs  | camelCase            | `flightNumber`, `parseFlightInput()` |
+| Types/Interfaces | PascalCase           | `FlightStatus`, `BotContext`         |
+| Classes          | PascalCase           | `AviationstackAPI`                   |
+| Constants        | SCREAMING_SNAKE_CASE | `POLL_INTERVAL_LONG`                 |
+| Files            | kebab-case           | `flight-service.ts`                  |
 
 ### Database Schema (Drizzle)
 
-- Define tables in `src/db/schema.ts`
-- Use SQLite-specific types from `drizzle-orm/sqlite-core`
-- Include timestamps with `unixepoch()` default
-- Use `$onUpdate` for automatic timestamp updates
+Define in `src/db/schema.ts`. Use SQLite types from `drizzle-orm/sqlite-core`. Include timestamps with `unixepoch()` default and `$onUpdate`.
 
 ```typescript
 export const flights = sqliteTable("flights", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  flightNumber: text("flight_number").notNull(),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`)
+    .$onUpdate(() => new Date()),
 });
 ```
 
 ### Error Handling
 
 - Throw descriptive errors with context
-- Use typed error classes for expected errors
-- Log errors with relevant metadata
-- Handle API rate limits gracefully with user-friendly messages
+- Use `instanceof Error` for type checking
+- Log errors with `console.error`
+- Handle API errors with user-friendly messages
 
 ```typescript
-if (!flight) {
-  throw new Error(`Flight not found: ${flightNumber} on ${date}`);
+if (error instanceof Error) {
+  if (error.message === "Rate limit exceeded") {
+    await ctx.reply("⚠️ Rate limit exceeded. Please try again later.");
+    return;
+  }
 }
 ```
 
 ### Telegram Bot Patterns
 
-- Use grammY's context object (`ctx`) for all handlers
-- Return `Promise<void>` from handlers
-- Use middleware for shared logic (auth, logging)
-- Keep handlers thin - delegate to service functions
+- Import `bot` from `../bot/index.js` (handlers self-register)
+- Return early on errors (guard clause)
+- Use `{ parse_mode: "Markdown" }` for formatted messages
+- Emoji prefixes: ✅ success, ❌ error, ⚠️ warning, ℹ️ info
 
 ```typescript
-bot.command("track", async (ctx) => {
-  const args = ctx.match;
-  await handleTrackCommand(ctx, args);
+import type { Context } from "grammy";
+import { bot } from "../bot/index.js";
+
+bot.command("track", async (ctx: Context) => {
+  const args = ctx.match?.toString().trim().split(/\s+/);
+  if (!args || args.length < 2) {
+    await ctx.reply("❌ *Invalid format*", { parse_mode: "Markdown" });
+    return;
+  }
 });
 ```
 
@@ -154,55 +123,37 @@ bot.command("track", async (ctx) => {
 
 ```
 src/
-├── index.ts           # Entry point, bot initialization
+├── index.ts           # Entry point
+├── bot/index.ts       # Bot instance, start/stop
 ├── db/
 │   ├── index.ts       # Database connection
-│   └── schema.ts      # Drizzle schema definitions
+│   └── schema.ts      # Drizzle schema
 ├── services/          # Business logic
-│   ├── flight-service.ts
-│   └── polling-service.ts
-├── handlers/          # Telegram command handlers
-│   └── commands.ts
-├── utils/             # Shared utilities
-│   └── date-parser.ts
-└── types/             # TypeScript type definitions
-    └── api-types.ts
+├── handlers/          # Command handlers (self-register)
+└── utils/             # Shared utilities
 ```
 
 ---
 
 ## Environment Variables
 
-Required variables (see `.env.example`):
-
 - `BOT_TOKEN` - Telegram bot token from @BotFather
 - `AVIATIONSTACK_API_KEY` - API key from aviationstack.com
 
-Never commit `.env` files. Access via `process.env.VARIABLE_NAME`.
+---
+
+## API Notes
+
+- Aviationstack has rate limits on free tier
+- Handle 429 as "Rate limit exceeded", 401 as "Invalid API key"
+- API class instances created at module level
 
 ---
 
-## Git Commit Guidelines
+## Reminders
 
-- Write clear, descriptive commit messages
-- Use conventional commits format: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`
-- Run `bun run typecheck` and `bun run lint` before committing
-
----
-
-## API Integration Notes
-
-- Aviationstack API has rate limits on free tier
-- Implement request deduplication (same flight polled once regardless of trackers)
-- Cache responses where appropriate to minimize API calls
-- Handle API errors gracefully with user-friendly Telegram messages
-
----
-
-## Important Reminders
-
-1. Always run `bun run typecheck` after modifying TypeScript files
-2. Always run `bun run lint` before committing
+1. Run `bun run typecheck` after modifying TypeScript
+2. Run `bun run lint` before committing
 3. Generate migrations when modifying `src/db/schema.ts`
-4. Use `bun` for package management and running scripts
-5. Follow existing patterns in the codebase
+4. Handlers self-register by importing `bot` and calling `bot.command()`
+5. Use `import type` for type-only imports

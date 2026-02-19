@@ -32,23 +32,24 @@ bun run start
 
 ## Environment Variables
 
-| Variable | Description |
-|---|---|
-| `BOT_TOKEN` | Telegram bot token from [@BotFather](https://t.me/BotFather) |
+| Variable                | Description                                                  |
+| ----------------------- | ------------------------------------------------------------ |
+| `BOT_TOKEN`             | Telegram bot token from [@BotFather](https://t.me/BotFather) |
 | `AVIATIONSTACK_API_KEY` | API key from [aviationstack.com](https://aviationstack.com/) |
 
 ## Bot Commands
 
-| Command | Description |
-|---|---|
-| `/start` | Welcome message |
-| `/track AA123 2026-03-15` | Track a flight |
-| `/flights` | List all tracked flights |
-| `/status AA123` | View current flight status + timeline |
-| `/remove AA123` | Stop tracking a flight |
-| `/help` | Show available commands |
+| Command                   | Description                           |
+| ------------------------- | ------------------------------------- |
+| `/start`                  | Welcome message                       |
+| `/track AA123 2026-03-15` | Track a flight                        |
+| `/flights`                | List all tracked flights              |
+| `/status AA123`           | View current flight status + timeline |
+| `/remove AA123`           | Stop tracking a flight                |
+| `/help`                   | Show available commands               |
 
 The bot also understands natural language:
+
 - `Track my flight AA123 tomorrow`
 - `SFO to LAX today`
 
