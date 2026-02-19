@@ -112,4 +112,39 @@ export class AviationstackAPI {
 			throw new Error("Failed to fetch flight data");
 		}
 	}
+
+	async getFlightsByRoute(
+		origin: string,
+		destination: string,
+		date: string,
+	): Promise<AviationstackFlight[]> {
+		const url = new URL(`${API_BASE_URL}/flights`);
+		url.searchParams.append("access_key", this.apiKey);
+		url.searchParams.append("dep_iata", origin);
+		url.searchParams.append("arr_iata", destination);
+		url.searchParams.append("flight_date", date);
+
+		try {
+			const response = await fetch(url.toString());
+
+			if (!response.ok) {
+				if (response.status === 429) {
+					throw new Error("Rate limit exceeded");
+				}
+				if (response.status === 401) {
+					throw new Error("Invalid API key");
+				}
+				throw new Error(`API request failed: ${response.status}`);
+			}
+
+			const data = (await response.json()) as AviationstackResponse;
+
+			return data.data;
+		} catch (error) {
+			if (error instanceof Error) {
+				throw error;
+			}
+			throw new Error("Failed to fetch flight data");
+		}
+	}
 }

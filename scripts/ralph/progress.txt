@@ -64,3 +64,21 @@ Started: Thu Feb 19 11:09:23 +08 2026
 - Import handlers to register them - they run on module import, not on explicit call
 - Remove generic message handlers when implementing specific ones
 ---
+
+## Thu Feb 19 11:25:38 +08 2026 - US-005
+- Added getFlightsByRoute method to Aviationstack API service
+- Created pending selection utility for storing route lookup results in memory
+- Updated natural language handler to detect route patterns (SFO to LAX)
+- Bot queries Aviationstack API for flights matching route and date
+- Bot presents up to 5 matching flights with flight number, airline, departure time
+- User can reply with a number (1-5) to select which flight to track
+- Selected flight is saved and tracked using the same flow as US-003
+- If no flights found, bot shows clear message with helpful hints
+- Pending selections expire after 5 minutes to clean up memory
+- Typecheck passes
+- Files changed: src/services/aviationstack.ts, src/utils/pending-selections.ts, src/handlers/natural-language.ts
+**Learnings for future iterations:**
+- Use in-memory Map for pending selections with timeout for cleanup
+- Route detection should be checked before flight number detection
+- Chat ID needs to be extracted early in the handler for all code paths
+---
