@@ -3,56 +3,17 @@ import { logger } from "../utils/logger.js";
 import { bot } from "./instance.js";
 
 export { bot } from "./instance.js";
+
+// Command handlers — import before natural-language (catch-all)
+import "../handlers/start.js";
 import "../handlers/track.js";
-import "../handlers/natural-language.js";
 import "../handlers/flights.js";
 import "../handlers/status.js";
 import "../handlers/remove.js";
 import "../handlers/usage.js";
 
-bot.use(async (ctx, next) => {
-	logger.debug(
-		`Received update ${ctx.update.update_id}: ${ctx.message?.text ?? "(no text)"}`,
-	);
-	await next();
-});
-
-bot.command("start", async (ctx) => {
-	await ctx.reply(
-		"✈️ *Welcome to SkyAlert!*\n\n" +
-			"Your personal flight monitoring assistant. Track flights in real-time and get instant alerts on delays, gate changes, boarding, and more.\n\n" +
-			"*Quick Start:*\n" +
-			"• Use /help to see all available commands\n" +
-			"• Use /track followed by flight number and date (e.g., `/track AA123 2026-03-15`)\n\n" +
-			"*Supported formats:*\n" +
-			"• Flight number: `/track UA456 2026-03-20`\n" +
-			"• Route: `SFO to LAX today`\n" +
-			"• Natural language: `Track my flight DL789 tomorrow`\n\n" +
-			"Get notified before you fly! 🚀",
-		{ parse_mode: "Markdown" },
-	);
-});
-
-bot.command("help", async (ctx) => {
-	await ctx.reply(
-		"*📋 Available Commands*\n\n" +
-			"/start - Welcome message\n" +
-			"/help - Show this help message\n" +
-			"/track <flight> <date> - Track a flight\n" +
-			"/flights - List all tracked flights\n" +
-			"/status <flight> - View flight status\n" +
-			"/remove <flight> - Stop tracking a flight\n" +
-			"/usage - Show API usage this month\n\n" +
-			"*Examples:*\n" +
-			"• `/track AA123 2026-03-15`\n" +
-			"• `/status UA456`\n" +
-			"• `/remove DL789`\n\n" +
-			"You can also use natural language:\n" +
-			'• "Track my flight AA123 tomorrow"\n' +
-			'• "SFO to LAX today"',
-		{ parse_mode: "Markdown" },
-	);
-});
+// Natural language must be last — it uses bot.on("message:text") which catches all text
+import "../handlers/natural-language.js";
 
 bot.catch((err) => {
 	const ctx = err.ctx;
