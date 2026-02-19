@@ -12,15 +12,15 @@ function getCurrentMonth(): string {
 
 async function getOrCreateMonthRecord() {
 	const month = getCurrentMonth();
-	const existing = await db.query.apiUsage.findFirst({
+	await db.insert(apiUsage).values({ month, requestCount: 0 }).onConflictDoNothing();
+
+	const record = await db.query.apiUsage.findFirst({
 		where: eq(apiUsage.month, month),
 	});
-
-	if (existing) return existing;
-
-	const result = await db.insert(apiUsage).values({ month, requestCount: 0 }).returning();
-
-	return result[0];
+	if (!record) {
+		throw new Error(`Failed to read API usage record for month ${month}`);
+	}
+	return record;
 }
 
 export async function getUsage(): Promise<{

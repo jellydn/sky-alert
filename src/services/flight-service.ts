@@ -49,20 +49,18 @@ export async function getFlightByNumberAndDate(flightNumber: string, flightDate:
 }
 
 export async function trackFlight(chatId: string, flightId: number) {
-	const existing = await db.query.trackedFlights.findFirst({
-		where: and(eq(trackedFlights.chatId, chatId), eq(trackedFlights.flightId, flightId)),
-	});
+	const result = await db
+		.insert(trackedFlights)
+		.values({
+			chatId,
+			flightId,
+		})
+		.onConflictDoNothing({
+			target: [trackedFlights.chatId, trackedFlights.flightId],
+		})
+		.returning({ id: trackedFlights.id });
 
-	if (existing) {
-		return false;
-	}
-
-	await db.insert(trackedFlights).values({
-		chatId,
-		flightId,
-	});
-
-	return true;
+	return result.length > 0;
 }
 
 export async function untrackFlight(chatId: string, flightId: number) {
@@ -80,6 +78,8 @@ export async function untrackFlight(chatId: string, flightId: number) {
 }
 
 export function convertAviationstackFlight(apiFlight: AviationstackFlight): FlightInput {
+	const delayMinutes = getDelayMinutes(apiFlight);
+
 	return {
 		flightNumber: apiFlight.flight.iata,
 		flightDate: apiFlight.flight_date,
@@ -90,6 +90,37 @@ export function convertAviationstackFlight(apiFlight: AviationstackFlight): Flig
 		currentStatus: apiFlight.flight_status,
 		gate: apiFlight.departure.gate || undefined,
 		terminal: apiFlight.departure.terminal || undefined,
-		delayMinutes: apiFlight.departure.delay || undefined,
+		delayMinutes,
 	};
+}
+
+export function selectBestMatchingFlight(
+	candidates: AviationstackFlight[],
+	origin: string,
+	destination: string,
+): AviationstackFlight | undefined {
+	return (
+		candidates.find((candidate) => {
+			return candidate.departure.iata === origin && candidate.arrival.iata === destination;
+		}) ?? candidates[0]
+	);
+}
+
+export function getDelayMinutes(apiFlight: AviationstackFlight): number | undefined {
+	if (apiFlight.departure.delay && apiFlight.departure.delay > 0) {
+		return apiFlight.departure.delay;
+	}
+
+	if (!apiFlight.departure.estimated || !apiFlight.departure.scheduled) {
+		return undefined;
+	}
+
+	const estimatedMs = Date.parse(apiFlight.departure.estimated);
+	const scheduledMs = Date.parse(apiFlight.departure.scheduled);
+	if (Number.isNaN(estimatedMs) || Number.isNaN(scheduledMs)) {
+		return undefined;
+	}
+
+	const diffMinutes = Math.round((estimatedMs - scheduledMs) / (60 * 1000));
+	return diffMinutes > 0 ? diffMinutes : undefined;
 }

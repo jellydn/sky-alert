@@ -1,0 +1,1 @@
+ALTER TABLE `tracked_flights` ADD `updated_at` integer DEFAULT (unixepoch()) NOT NULL;

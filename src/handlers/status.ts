@@ -4,12 +4,36 @@ import { bot } from "../bot/instance.js";
 import { db } from "../db/index.js";
 import { flights, statusChanges, trackedFlights } from "../db/schema.js";
 import { canMakeRequest } from "../services/api-budget.js";
-import { AviationstackAPI } from "../services/aviationstack.js";
+import { aviationstackApi } from "../services/aviationstack.js";
+import { getDelayMinutes, selectBestMatchingFlight } from "../services/flight-service.js";
+import { getFlightAwareFallback } from "../services/flightaware-fallback.js";
+import { getFlightStatsFallback } from "../services/flightstats-fallback.js";
 import { formatDateTime } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
 
-const api = new AviationstackAPI();
 const STALE_THRESHOLD = 15 * 60 * 1000; // 15 minutes
+
+function shouldUseFallback(status: string, delayMinutes?: number): boolean {
+	return (!delayMinutes || delayMinutes <= 0) && (status === "scheduled" || status.length === 0);
+}
+
+function addMinutesToIso(isoString: string, minutes: number): string | undefined {
+	const baseTimeMs = Date.parse(isoString);
+	if (Number.isNaN(baseTimeMs)) {
+		return undefined;
+	}
+
+	return new Date(baseTimeMs + minutes * 60 * 1000).toISOString();
+}
+
+function parseCarrierAndNumber(flightCode: string): { carrier?: string; number?: string } {
+	const match = flightCode.match(/^([A-Z]{2,3})(\d{1,4})$/);
+	if (!match) {
+		return {};
+	}
+
+	return { carrier: match[1], number: match[2] };
+}
 
 bot.command("status", async (ctx: Context) => {
 	const args = ctx.match?.toString().trim();
@@ -33,6 +57,12 @@ bot.command("status", async (ctx: Context) => {
 	}
 
 	try {
+		let refreshFailed = false;
+		let liveEstimatedDeparture: string | undefined;
+		let liveEstimatedArrival: string | undefined;
+		let liveArrivalGate: string | undefined;
+		let liveArrivalTerminal: string | undefined;
+
 		const userTrackings = await db
 			.select({
 				flight: flights,
@@ -52,21 +82,85 @@ bot.command("status", async (ctx: Context) => {
 		}
 
 		let flight = userTrackings[0].flight;
+		let displayStatus = flight.currentStatus || "";
+		let displayDelayMinutes = flight.delayMinutes || undefined;
+		let displayDepartureGate = flight.gate || undefined;
+		let displayDepartureTerminal = flight.terminal || undefined;
 
 		const lastPolled = flight.lastPolledAt ? flight.lastPolledAt * 1000 : 0;
-		const isStale = Date.now() - lastPolled > STALE_THRESHOLD;
+		const isStale = Date.now() - lastPolled >= STALE_THRESHOLD;
 		const isFlightActive =
 			flight.currentStatus !== "landed" && flight.currentStatus !== "cancelled";
+		const hasLowSignalStatus = shouldUseFallback(
+			flight.currentStatus || "",
+			flight.delayMinutes || undefined,
+		);
 		const canRefresh = await canMakeRequest();
-		const shouldRefresh = isStale && isFlightActive && canRefresh;
+		const shouldRefresh = isFlightActive && canRefresh && (isStale || hasLowSignalStatus);
 
 		if (shouldRefresh) {
 			try {
-				const apiFlights = await api.getFlightsByNumber(flight.flightNumber, flight.flightDate);
+				const apiFlights = await aviationstackApi.getFlightsByNumber(
+					flight.flightNumber,
+					flight.flightDate,
+					{ bypassCache: true },
+				);
 				if (apiFlights.length > 0) {
-					const apiFlight = apiFlights[0];
+					const apiFlight = selectBestMatchingFlight(apiFlights, flight.origin, flight.destination);
+					if (!apiFlight) {
+						throw new Error("No matching API flight found");
+					}
+					let nextDelayMinutes = getDelayMinutes(apiFlight);
+					let newStatus = apiFlight.flight_status;
+					let nextGate = apiFlight.departure.gate || undefined;
+					let nextTerminal = apiFlight.departure.terminal || undefined;
+					let flightStatsFallbackUsed = false;
+
+					if (shouldUseFallback(newStatus, nextDelayMinutes)) {
+						const parsedCode = parseCarrierAndNumber(flight.flightNumber);
+						const carrierCode =
+							apiFlight.airline.iata || parsedCode.carrier || apiFlight.flight.iata.slice(0, 2);
+						const flightNo = apiFlight.flight.number || parsedCode.number || "";
+
+						const flightStatsFallback = flightNo
+							? await getFlightStatsFallback(carrierCode, flightNo)
+							: undefined;
+
+						if (flightStatsFallback) {
+							flightStatsFallbackUsed = true;
+							if (flightStatsFallback.delayMinutes && flightStatsFallback.delayMinutes > 0) {
+								nextDelayMinutes = flightStatsFallback.delayMinutes;
+							}
+							if (flightStatsFallback.status && shouldUseFallback(newStatus, nextDelayMinutes)) {
+								newStatus = flightStatsFallback.status;
+							}
+							if (flightStatsFallback.departureGate) {
+								nextGate = flightStatsFallback.departureGate;
+							}
+							if (flightStatsFallback.departureTerminal) {
+								nextTerminal = flightStatsFallback.departureTerminal;
+							}
+							liveEstimatedDeparture = flightStatsFallback.estimatedDeparture;
+							liveEstimatedArrival = flightStatsFallback.estimatedArrival;
+							liveArrivalGate = flightStatsFallback.arrivalGate;
+							liveArrivalTerminal = flightStatsFallback.arrivalTerminal;
+						}
+
+						if (!flightStatsFallbackUsed || shouldUseFallback(newStatus, nextDelayMinutes)) {
+							const fallback = await getFlightAwareFallback(
+								[apiFlight.flight.icao, apiFlight.flight.iata, flight.flightNumber],
+								flight.origin,
+								flight.destination,
+							);
+							if (fallback?.delayMinutes && fallback.delayMinutes > 0) {
+								nextDelayMinutes = fallback.delayMinutes;
+							}
+							if (fallback?.status && shouldUseFallback(newStatus, nextDelayMinutes)) {
+								newStatus = fallback.status;
+							}
+						}
+					}
 					const oldStatus = flight.currentStatus;
-					const newStatus = apiFlight.flight_status;
 
 					if (oldStatus !== newStatus) {
 						await db.insert(statusChanges).values({
@@ -79,10 +173,10 @@ bot.command("status", async (ctx: Context) => {
 					await db
 						.update(flights)
 						.set({
-							currentStatus: apiFlight.flight_status,
-							gate: apiFlight.departure.gate || undefined,
-							terminal: apiFlight.departure.terminal || undefined,
-							delayMinutes: apiFlight.departure.delay || undefined,
+							currentStatus: newStatus,
+							gate: nextGate,
+							terminal: nextTerminal,
+							delayMinutes: nextDelayMinutes,
 							lastPolledAt: Math.floor(Date.now() / 1000),
 						})
 						.where(eq(flights.id, flight.id));
@@ -91,9 +185,52 @@ bot.command("status", async (ctx: Context) => {
 						where: eq(flights.id, flight.id),
 					});
 					if (updated) flight = updated;
+					displayStatus = newStatus || displayStatus;
+					displayDelayMinutes = nextDelayMinutes || undefined;
+					displayDepartureGate = nextGate;
+					displayDepartureTerminal = nextTerminal;
 				}
-			} catch {
-				// Silently fall back to cached data
+			} catch (error) {
+				refreshFailed = true;
+				logger.warn(`Live refresh failed for ${flight.flightNumber}:`, error);
+			}
+		}
+
+		if (isFlightActive) {
+			const parsedCode = parseCarrierAndNumber(flight.flightNumber);
+			if (parsedCode.carrier && parsedCode.number) {
+				try {
+					const flightStatsFallback = await getFlightStatsFallback(
+						parsedCode.carrier,
+						parsedCode.number,
+					);
+					if (flightStatsFallback?.status) {
+						displayStatus = flightStatsFallback.status;
+					}
+					if (flightStatsFallback?.delayMinutes && flightStatsFallback.delayMinutes > 0) {
+						displayDelayMinutes = flightStatsFallback.delayMinutes;
+					}
+					if (flightStatsFallback?.departureGate) {
+						displayDepartureGate = flightStatsFallback.departureGate;
+					}
+					if (flightStatsFallback?.departureTerminal) {
+						displayDepartureTerminal = flightStatsFallback.departureTerminal;
+					}
+					if (flightStatsFallback?.estimatedDeparture) {
+						liveEstimatedDeparture = flightStatsFallback.estimatedDeparture;
+					}
+					if (flightStatsFallback?.estimatedArrival) {
+						liveEstimatedArrival = flightStatsFallback.estimatedArrival;
+					}
+					if (flightStatsFallback?.arrivalGate) {
+						liveArrivalGate = flightStatsFallback.arrivalGate;
+					}
+					if (flightStatsFallback?.arrivalTerminal) {
+						liveArrivalTerminal = flightStatsFallback.arrivalTerminal;
+					}
+				} catch (error) {
+					logger.debug(`FlightStats display enrichment failed for ${flight.flightNumber}:`, error);
+				}
 			}
 		}
 
@@ -110,27 +247,50 @@ bot.command("status", async (ctx: Context) => {
 
 		message += "*Departure:*\n";
 		message += `   Scheduled: ${formatDateTime(flight.scheduledDeparture)} (${flight.origin})\n`;
-
-		if (flight.currentStatus) {
-			message += `   Status: ${flight.currentStatus}\n`;
+		if (liveEstimatedDeparture) {
+			message += `   Estimated: ${formatDateTime(liveEstimatedDeparture)} (${flight.origin})\n`;
+		} else if (displayDelayMinutes && displayDelayMinutes > 0) {
+			const estimatedDeparture = addMinutesToIso(flight.scheduledDeparture, displayDelayMinutes);
+			if (estimatedDeparture) {
+				message += `   Estimated: ${formatDateTime(estimatedDeparture)} (${flight.origin})\n`;
+			}
 		}
 
-		if (flight.gate) {
-			message += `   🚪 Gate: ${flight.gate}\n`;
+		if (displayStatus) {
+			message += `   Status: ${displayStatus}\n`;
 		}
 
-		if (flight.terminal) {
-			message += `   🏢 Terminal: ${flight.terminal}\n`;
+		if (displayDepartureGate) {
+			message += `   🚪 Gate: ${displayDepartureGate}\n`;
 		}
 
-		if (flight.delayMinutes && flight.delayMinutes > 0) {
-			message += `   ⏱️ Delay: ${flight.delayMinutes} min\n`;
+		if (displayDepartureTerminal) {
+			message += `   🏢 Terminal: ${displayDepartureTerminal}\n`;
+		}
+
+		if (displayDelayMinutes && displayDelayMinutes > 0) {
+			message += `   ⏱️ Delay: ${displayDelayMinutes} min\n`;
 		}
 
 		message += "\n";
 
 		message += "*Arrival:*\n";
-		message += `   Scheduled: ${formatDateTime(flight.scheduledArrival)} (${flight.destination})\n\n`;
+		message += `   Scheduled: ${formatDateTime(flight.scheduledArrival)} (${flight.destination})\n`;
+		if (liveEstimatedArrival) {
+			message += `   Estimated: ${formatDateTime(liveEstimatedArrival)} (${flight.destination})\n`;
+		} else if (displayDelayMinutes && displayDelayMinutes > 0) {
+			const estimatedArrival = addMinutesToIso(flight.scheduledArrival, displayDelayMinutes);
+			if (estimatedArrival) {
+				message += `   Estimated: ${formatDateTime(estimatedArrival)} (${flight.destination})\n`;
+			}
+		}
+		if (liveArrivalGate) {
+			message += `   🚪 Gate: ${liveArrivalGate}\n`;
+		}
+		if (liveArrivalTerminal) {
+			message += `   🏢 Terminal: ${liveArrivalTerminal}\n`;
+		}
+		message += "\n";
 
 		if (changes.length > 0) {
 			message += "*Recent Status Changes:*\n";
@@ -157,6 +317,9 @@ bot.command("status", async (ctx: Context) => {
 		if (flight.lastPolledAt) {
 			const ago = Math.round((Date.now() - flight.lastPolledAt * 1000) / 60000);
 			message += `\n_Updated ${ago} min ago_`;
+		}
+		if (refreshFailed) {
+			message += "\n_⚠️ Could not refresh live status. Showing latest cached data._";
 		}
 
 		await ctx.reply(message, { parse_mode: "Markdown" });

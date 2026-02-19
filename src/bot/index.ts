@@ -34,6 +34,6 @@ export async function startBot() {
 	}
 }
 
-export function stopBot() {
+export async function stopBot(): Promise<void> {
 	bot.stop();
 }

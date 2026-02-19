@@ -4,24 +4,51 @@ import { db } from "../db/index.js";
 import { flights, statusChanges, trackedFlights } from "../db/schema.js";
 import { logger } from "../utils/logger.js";
 import { isPollingEnabled } from "./api-budget.js";
-import { AviationstackAPI } from "./aviationstack.js";
-
-const api = new AviationstackAPI();
+import { aviationstackApi } from "./aviationstack.js";
+import { getDelayMinutes, selectBestMatchingFlight } from "./flight-service.js";
+import { getFlightAwareFallback } from "./flightaware-fallback.js";
+import { getFlightStatsFallback } from "./flightstats-fallback.js";
 
 const POLL_INTERVAL_FAR = 15 * 60 * 1000;
 const POLL_INTERVAL_NEAR = 5 * 60 * 1000;
 const POLL_INTERVAL_IMMINENT = 1 * 60 * 1000;
 const HOURS_BEFORE_START_POLLING = 6;
 const WORKER_CHECK_INTERVAL = 1 * 60 * 1000;
+let pollingTimer: ReturnType<typeof setInterval> | null = null;
+
+function shouldUseFallback(status: string, delayMinutes?: number): boolean {
+	return (!delayMinutes || delayMinutes <= 0) && (status === "scheduled" || status.length === 0);
+}
+
+function parseCarrierAndNumber(flightCode: string): { carrier?: string; number?: string } {
+	const match = flightCode.match(/^([A-Z]{2,3})(\d{1,4})$/);
+	if (!match) {
+		return {};
+	}
+
+	return { carrier: match[1], number: match[2] };
+}
 
 export function startPollingWorker() {
+	if (pollingTimer) {
+		return;
+	}
+
 	logger.info("✓ Starting polling worker (budget-aware)");
 
-	setInterval(async () => {
+	pollingTimer = setInterval(async () => {
 		if (await isPollingEnabled()) {
 			await pollFlights();
 		}
 	}, WORKER_CHECK_INTERVAL);
+}
+
+export function stopPollingWorker() {
+	if (pollingTimer) {
+		clearInterval(pollingTimer);
+		pollingTimer = null;
+		logger.info("✓ Polling worker stopped");
+	}
 }
 
 function getPollInterval(scheduledDeparture: Date, now: Date): number {
@@ -74,54 +101,100 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 		}
 
 		const flight = currentFlight[0];
-		const apiFlights = await api.getFlightsByNumber(flightNumber, flightDate);
+		const apiFlights = await aviationstackApi.getFlightsByNumber(flightNumber, flightDate, {
+			bypassCache: true,
+		});
 
 		if (apiFlights.length === 0) {
 			return;
 		}
 
-		const apiFlight = apiFlights[0];
+		const apiFlight = selectBestMatchingFlight(apiFlights, flight.origin, flight.destination);
+		if (!apiFlight) {
+			return;
+		}
+		let nextDelayMinutes = getDelayMinutes(apiFlight);
+		let nextStatus = apiFlight.flight_status;
+		let nextGate = apiFlight.departure.gate || undefined;
+		let nextTerminal = apiFlight.departure.terminal || undefined;
+		let flightStatsFallbackUsed = false;
+
+		if (shouldUseFallback(nextStatus, nextDelayMinutes)) {
+			const parsedCode = parseCarrierAndNumber(flightNumber);
+			const carrierCode =
+				apiFlight.airline.iata || parsedCode.carrier || apiFlight.flight.iata.slice(0, 2);
+			const flightNo = apiFlight.flight.number || parsedCode.number || "";
+			const flightStatsFallback = flightNo
+				? await getFlightStatsFallback(carrierCode, flightNo)
+				: undefined;
+
+			if (flightStatsFallback) {
+				flightStatsFallbackUsed = true;
+				if (flightStatsFallback.delayMinutes && flightStatsFallback.delayMinutes > 0) {
+					nextDelayMinutes = flightStatsFallback.delayMinutes;
+				}
+				if (flightStatsFallback.status && shouldUseFallback(nextStatus, nextDelayMinutes)) {
+					nextStatus = flightStatsFallback.status;
+				}
+				if (flightStatsFallback.departureGate) {
+					nextGate = flightStatsFallback.departureGate;
+				}
+				if (flightStatsFallback.departureTerminal) {
+					nextTerminal = flightStatsFallback.departureTerminal;
+				}
+			}
+
+			if (!flightStatsFallbackUsed || shouldUseFallback(nextStatus, nextDelayMinutes)) {
+				const fallback = await getFlightAwareFallback(
+					[apiFlight.flight.icao, apiFlight.flight.iata, flightNumber],
+					flight.origin,
+					flight.destination,
+				);
+				if (fallback?.delayMinutes && fallback.delayMinutes > 0) {
+					nextDelayMinutes = fallback.delayMinutes;
+				}
+				if (fallback?.status && shouldUseFallback(nextStatus, nextDelayMinutes)) {
+					nextStatus = fallback.status;
+				}
+			}
+		}
 
 		const changes: { field: string; from: string; to: string }[] = [];
 
-		if (flight.currentStatus !== apiFlight.flight_status) {
+		if (flight.currentStatus !== nextStatus) {
 			changes.push({
 				field: "Status",
 				from: flight.currentStatus || "N/A",
-				to: apiFlight.flight_status,
+				to: nextStatus,
 			});
 			await db.insert(statusChanges).values({
 				flightId,
 				oldStatus: flight.currentStatus,
-				newStatus: apiFlight.flight_status,
+				newStatus: nextStatus,
 			});
 		}
 
-		if (flight.gate !== apiFlight.departure.gate && apiFlight.departure.gate) {
+		if (flight.gate !== nextGate && nextGate) {
 			changes.push({
 				field: "Gate",
 				from: flight.gate || "N/A",
-				to: apiFlight.departure.gate,
+				to: nextGate,
 			});
 		}
 
-		if (flight.terminal !== apiFlight.departure.terminal && apiFlight.departure.terminal) {
+		if (flight.terminal !== nextTerminal && nextTerminal) {
 			changes.push({
 				field: "Terminal",
 				from: flight.terminal || "N/A",
-				to: apiFlight.departure.terminal,
+				to: nextTerminal,
 			});
 		}
 
-		if (
-			flight.delayMinutes !== apiFlight.departure.delay &&
-			apiFlight.departure.delay &&
-			apiFlight.departure.delay > 0
-		) {
+		if (flight.delayMinutes !== nextDelayMinutes && nextDelayMinutes && nextDelayMinutes > 0) {
 			changes.push({
 				field: "Delay",
 				from: `${flight.delayMinutes || 0} min`,
-				to: `${apiFlight.departure.delay} min`,
+				to: `${nextDelayMinutes} min`,
 			});
 		}
 
@@ -150,10 +223,10 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 		await db
 			.update(flights)
 			.set({
-				currentStatus: apiFlight.flight_status,
-				gate: apiFlight.departure.gate || undefined,
-				terminal: apiFlight.departure.terminal || undefined,
-				delayMinutes: apiFlight.departure.delay || undefined,
+				currentStatus: nextStatus,
+				gate: nextGate,
+				terminal: nextTerminal,
+				delayMinutes: nextDelayMinutes,
 				lastPolledAt: Math.floor(Date.now() / 1000),
 			})
 			.where(eq(flights.id, flightId));

@@ -68,10 +68,15 @@ export interface AviationstackResponse {
 
 const API_BASE_URL = "https://api.aviationstack.com/v1";
 const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+const MAX_CACHE_ENTRIES = 500;
 
 interface CacheEntry<T> {
 	data: T;
 	timestamp: number;
+}
+
+interface FlightQueryOptions {
+	bypassCache?: boolean;
 }
 
 export class AviationstackAPI {
@@ -92,10 +97,20 @@ export class AviationstackAPI {
 			this.cache.delete(key);
 			return undefined;
 		}
+
+		// Refresh insertion order on reads to make eviction LRU by access.
+		this.cache.delete(key);
+		this.cache.set(key, entry);
 		return entry.data as T;
 	}
 
 	private setCache<T>(key: string, data: T): void {
+		if (this.cache.size >= MAX_CACHE_ENTRIES) {
+			const oldestKey = this.cache.keys().next().value;
+			if (oldestKey) {
+				this.cache.delete(oldestKey);
+			}
+		}
 		this.cache.set(key, { data, timestamp: Date.now() });
 	}
 
@@ -127,10 +142,16 @@ export class AviationstackAPI {
 		return (await response.json()) as AviationstackResponse;
 	}
 
-	async getFlightsByNumber(flightNumber: string, date: string): Promise<AviationstackFlight[]> {
+	async getFlightsByNumber(
+		flightNumber: string,
+		date: string,
+		options?: FlightQueryOptions,
+	): Promise<AviationstackFlight[]> {
 		const cacheKey = `flights:${flightNumber}:${date}`;
-		const cached = this.getCached<AviationstackFlight[]>(cacheKey);
-		if (cached !== undefined) return cached;
+		if (!options?.bypassCache) {
+			const cached = this.getCached<AviationstackFlight[]>(cacheKey);
+			if (cached !== undefined) return cached;
+		}
 
 		const url = new URL(`${API_BASE_URL}/flights`);
 		url.searchParams.append("access_key", this.apiKey);
@@ -146,10 +167,13 @@ export class AviationstackAPI {
 		origin: string,
 		destination: string,
 		date: string,
+		options?: FlightQueryOptions,
 	): Promise<AviationstackFlight[]> {
 		const cacheKey = `route:${origin}:${destination}:${date}`;
-		const cached = this.getCached<AviationstackFlight[]>(cacheKey);
-		if (cached !== undefined) return cached;
+		if (!options?.bypassCache) {
+			const cached = this.getCached<AviationstackFlight[]>(cacheKey);
+			if (cached !== undefined) return cached;
+		}
 
 		const url = new URL(`${API_BASE_URL}/flights`);
 		url.searchParams.append("access_key", this.apiKey);
@@ -162,3 +186,5 @@ export class AviationstackAPI {
 		return matching;
 	}
 }
+
+export const aviationstackApi = new AviationstackAPI();

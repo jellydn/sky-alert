@@ -1,7 +1,7 @@
 import type { Context } from "grammy";
 import { bot } from "../bot/instance.js";
 import type { AviationstackFlight } from "../services/aviationstack.js";
-import { AviationstackAPI } from "../services/aviationstack.js";
+import { aviationstackApi } from "../services/aviationstack.js";
 import {
 	convertAviationstackFlight,
 	createFlight,
@@ -14,8 +14,6 @@ import { formatFlightListMessage } from "../utils/format-flight-list.js";
 import { formatTime } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
 import { setPendingSelection } from "../utils/pending-selections.js";
-
-const api = new AviationstackAPI();
 
 bot.command("track", async (ctx: Context) => {
 	const args = ctx.match?.toString().trim().split(/\s+/);
@@ -42,7 +40,7 @@ bot.command("track", async (ctx: Context) => {
 	try {
 		await ctx.reply("🔍 Looking up flight...");
 
-		const apiFlights = await api.getFlightsByNumber(flightNumber, date);
+		const apiFlights = await aviationstackApi.getFlightsByNumber(flightNumber, date);
 
 		if (apiFlights.length === 0) {
 			await ctx.reply(

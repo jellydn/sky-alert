@@ -71,10 +71,11 @@ describe("natural-language handler patterns and messages", () => {
 		}));
 
 		mock.module("../services/aviationstack.js", () => ({
-			AviationstackAPI: mock(() => ({
+			AviationstackAPI: mock(() => ({})),
+			aviationstackApi: {
 				getFlightsByRoute: mock(() => Promise.resolve([mockApiFlight])),
 				getFlightsByNumber: mock(() => Promise.resolve([mockApiFlight])),
-			})),
+			},
 		}));
 
 		mock.module("../utils/pending-selections.js", () => ({
