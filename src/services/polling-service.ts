@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { bot } from "../bot/instance.js";
 import { db } from "../db/index.js";
 import { flights, statusChanges, trackedFlights } from "../db/schema.js";
+import { logger } from "../utils/logger.js";
 import { isPollingEnabled } from "./api-budget.js";
 import { AviationstackAPI } from "./aviationstack.js";
 
@@ -14,7 +15,7 @@ const HOURS_BEFORE_START_POLLING = 6;
 const WORKER_CHECK_INTERVAL = 1 * 60 * 1000; // check every minute
 
 export function startPollingWorker() {
-	console.log("✓ Starting polling worker (budget-aware)");
+	logger.info("✓ Starting polling worker (budget-aware)");
 
 	setInterval(async () => {
 		if (await isPollingEnabled()) {
@@ -69,7 +70,7 @@ async function pollFlights() {
 			await pollFlight(flight.id, flight.flightNumber, flight.flightDate);
 		}
 	} catch (error) {
-		console.error("Error in polling worker:", error);
+		logger.error("Error in polling worker:", error);
 	}
 }
 
@@ -156,7 +157,7 @@ async function pollFlight(
 						parse_mode: "Markdown",
 					});
 				} catch (error) {
-					console.error(`Error sending alert to ${tracker.chatId}:`, error);
+					logger.error(`Error sending alert to ${tracker.chatId}:`, error);
 				}
 			}
 		}
@@ -172,8 +173,8 @@ async function pollFlight(
 			})
 			.where(eq(flights.id, flightId));
 
-		console.log(`✓ Updated flight ${flightNumber}`);
+		logger.info(`✓ Updated flight ${flightNumber}`);
 	} catch (error) {
-		console.error(`Error polling flight ${flightNumber}:`, error);
+		logger.error(`Error polling flight ${flightNumber}:`, error);
 	}
 }

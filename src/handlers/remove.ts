@@ -3,6 +3,7 @@ import type { Context } from "grammy";
 import { bot } from "../bot/instance.js";
 import { db } from "../db/index.js";
 import { flights, trackedFlights } from "../db/schema.js";
+import { logger } from "../utils/logger.js";
 
 bot.command("remove", async (ctx: Context) => {
 	const args = ctx.match?.toString().trim();
@@ -84,7 +85,7 @@ bot.command("remove", async (ctx: Context) => {
 			{ parse_mode: "Markdown" },
 		);
 	} catch (error) {
-		console.error("Error removing flight:", error);
+		logger.error("Error removing flight:", error);
 		await ctx.reply("❌ Failed to remove flight. Please try again later.");
 	}
 });

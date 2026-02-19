@@ -1,13 +1,14 @@
 import { and, eq, gt, lt } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { flights } from "../db/schema.js";
+import { logger } from "../utils/logger.js";
 
 const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
 const HOURS_TO_MARK_INACTIVE = 24;
 const HOURS_TO_DELETE = 7 * 24; // 7 days
 
 export function startCleanupWorker() {
-	console.log("✓ Starting cleanup worker");
+	logger.info("✓ Starting cleanup worker");
 
 	setInterval(async () => {
 		await cleanupFlights();
@@ -43,7 +44,7 @@ async function cleanupFlights() {
 					.update(flights)
 					.set({ isActive: false })
 					.where(eq(flights.id, flight.id));
-				console.log(`✓ Marked flight ${flight.flightNumber} as inactive`);
+				logger.info(`✓ Marked flight ${flight.flightNumber} as inactive`);
 			}
 		}
 
@@ -54,9 +55,9 @@ async function cleanupFlights() {
 
 		for (const flight of flightsToDelete) {
 			await db.delete(flights).where(eq(flights.id, flight.id));
-			console.log(`✓ Deleted flight ${flight.flightNumber} from database`);
+			logger.info(`✓ Deleted flight ${flight.flightNumber} from database`);
 		}
 	} catch (error) {
-		console.error("Error in cleanup worker:", error);
+		logger.error("Error in cleanup worker:", error);
 	}
 }

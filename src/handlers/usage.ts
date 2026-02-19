@@ -1,5 +1,6 @@
 import { bot } from "../bot/instance.js"
 import { formatUsageMessage, getUsage, isPollingEnabled } from "../services/api-budget.js"
+import { logger } from "../utils/logger.js"
 
 bot.command("usage", async (ctx) => {
 	try {
@@ -15,7 +16,7 @@ bot.command("usage", async (ctx) => {
 
 		await ctx.reply(message, { parse_mode: "Markdown" })
 	} catch (error) {
-		console.error("Error showing usage:", error)
+		logger.error("Error showing usage:", error)
 		await ctx.reply("❌ Failed to retrieve API usage.")
 	}
 })

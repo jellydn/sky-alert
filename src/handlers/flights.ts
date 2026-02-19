@@ -3,6 +3,7 @@ import type { Context } from "grammy";
 import { bot } from "../bot/instance.js";
 import { db } from "../db/index.js";
 import { flights, trackedFlights } from "../db/schema.js";
+import { logger } from "../utils/logger.js";
 
 bot.command("flights", async (ctx: Context) => {
 	const chatId = ctx.chat?.id.toString();
@@ -64,7 +65,7 @@ bot.command("flights", async (ctx: Context) => {
 
 		await ctx.reply(message, { parse_mode: "Markdown" });
 	} catch (error) {
-		console.error("Error listing flights:", error);
+		logger.error("Error listing flights:", error);
 		await ctx.reply(
 			"❌ Failed to retrieve your flights. Please try again later.",
 		);

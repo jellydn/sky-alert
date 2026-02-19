@@ -3,16 +3,17 @@ import { startBot } from "./bot/index.js";
 import { db } from "./db/index.js";
 import { startCleanupWorker } from "./services/cleanup-service.js";
 import { startPollingWorker } from "./services/polling-service.js";
+import { logger } from "./utils/logger.js";
 
-console.log("SkyAlert - Real-time flight monitoring Telegram bot");
-console.log("Starting...");
+logger.info("SkyAlert - Real-time flight monitoring Telegram bot");
+logger.info("Starting...");
 
 // Verify database connection
 try {
 	db.query.flights.findFirst();
-	console.log("✓ Database connected");
+	logger.info("✓ Database connected");
 } catch (error) {
-	console.error("✗ Database connection failed:", error);
+	logger.error("✗ Database connection failed:", error);
 	process.exit(1);
 }
 
@@ -24,6 +25,6 @@ startPollingWorker();
 
 // Start the bot
 startBot().catch((error) => {
-	console.error("✗ Bot failed to start:", error);
+	logger.error("✗ Bot failed to start:", error);
 	process.exit(1);
 });

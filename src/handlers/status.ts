@@ -5,6 +5,7 @@ import { db } from "../db/index.js";
 import { flights, statusChanges, trackedFlights } from "../db/schema.js";
 import { canMakeRequest } from "../services/api-budget.js";
 import { AviationstackAPI } from "../services/aviationstack.js";
+import { logger } from "../utils/logger.js";
 
 const api = new AviationstackAPI();
 const STALE_THRESHOLD = 15 * 60 * 1000; // 15 minutes
@@ -59,8 +60,7 @@ bot.command("status", async (ctx: Context) => {
 		const lastPolled = flight.lastPolledAt ? flight.lastPolledAt * 1000 : 0;
 		const isStale = Date.now() - lastPolled > STALE_THRESHOLD;
 		const isActive =
-			flight.currentStatus !== "landed" &&
-			flight.currentStatus !== "cancelled";
+			flight.currentStatus !== "landed" && flight.currentStatus !== "cancelled";
 
 		if (isStale && isActive && (await canMakeRequest())) {
 			try {
@@ -178,7 +178,7 @@ bot.command("status", async (ctx: Context) => {
 
 		await ctx.reply(message, { parse_mode: "Markdown" });
 	} catch (error) {
-		console.error("Error showing flight status:", error);
+		logger.error("Error showing flight status:", error);
 		await ctx.reply(
 			"❌ Failed to retrieve flight status. Please try again later.",
 		);

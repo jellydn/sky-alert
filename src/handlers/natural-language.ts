@@ -8,6 +8,7 @@ import {
 	trackFlight,
 } from "../services/flight-service.js";
 import { parseFlightInput } from "../utils/flight-parser.js";
+import { logger } from "../utils/logger.js";
 import {
 	clearPendingSelection,
 	getPendingSelection,
@@ -85,7 +86,7 @@ bot.on("message:text", async (ctx: Context) => {
 					);
 					return;
 				}
-				console.error("Error looking up flights:", error);
+				logger.error("Error looking up flights:", error);
 				await ctx.reply(
 					"❌ Failed to look up flights. Please try again later.",
 				);
@@ -169,7 +170,7 @@ bot.on("message:text", async (ctx: Context) => {
 					);
 				} catch (error) {
 					if (error instanceof Error) {
-						console.error("Error tracking flight:", error);
+						logger.error("Error tracking flight:", error);
 						await ctx.reply(
 							"❌ Failed to track flight. Please try again later.",
 						);
@@ -260,7 +261,7 @@ bot.on("message:text", async (ctx: Context) => {
 					);
 					return;
 				}
-				console.error("Error tracking flight:", error);
+				logger.error("Error tracking flight:", error);
 				await ctx.reply("❌ Failed to track flight. Please try again later.");
 			}
 		}

@@ -7,6 +7,7 @@ import {
 	getFlightByNumberAndDate,
 	trackFlight,
 } from "../services/flight-service.js";
+import { logger } from "../utils/logger.js";
 
 const api = new AviationstackAPI();
 
@@ -111,10 +112,9 @@ bot.command("track", async (ctx: Context) => {
 			}
 
 			if (error.message === "Rate limit exceeded") {
-				await ctx.reply(
-					"⚠️ *Rate limit exceeded*\n\nPlease try again later.",
-					{ parse_mode: "Markdown" },
-				);
+				await ctx.reply("⚠️ *Rate limit exceeded*\n\nPlease try again later.", {
+					parse_mode: "Markdown",
+				});
 				return;
 			}
 
@@ -127,7 +127,7 @@ bot.command("track", async (ctx: Context) => {
 				return;
 			}
 
-			console.error("Error tracking flight:", error);
+			logger.error("Error tracking flight:", error);
 			await ctx.reply("❌ Failed to track flight. Please try again later.");
 		} else {
 			await ctx.reply(

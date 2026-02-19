@@ -1,4 +1,5 @@
 import { GrammyError } from "grammy";
+import { logger } from "../utils/logger.js";
 import { bot } from "./instance.js";
 
 export { bot } from "./instance.js";
@@ -46,12 +47,17 @@ bot.command("help", async (ctx) => {
 	);
 });
 
+bot.catch((err) => {
+	const ctx = err.ctx;
+	logger.error(`Error while handling update ${ctx.update.update_id}:`, err.error);
+});
+
 export async function startBot() {
 	try {
 		await bot.api.getMe();
-		console.log("✓ Bot connected to Telegram");
+		logger.info("✓ Bot connected to Telegram");
 		await bot.start();
-		console.log("✓ Bot started successfully");
+		logger.info("✓ Bot started successfully");
 	} catch (error) {
 		if (error instanceof GrammyError) {
 			throw new Error(`Bot API error: ${error.description}`);
