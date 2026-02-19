@@ -1,3 +1,5 @@
+import { logger } from "../utils/logger.js";
+
 export interface AviationstackFlight {
 	flight_date: string;
 	flight_status: string;
@@ -104,9 +106,13 @@ export class AviationstackAPI {
 			throw new Error("Monthly API budget exceeded");
 		}
 
-		const response = await fetch(url.toString());
+		const requestUrl = url.toString();
+		logger.debug(`API request: ${requestUrl.replace(this.apiKey, "***")}`);
+		const response = await fetch(requestUrl);
 
 		if (!response.ok) {
+			const body = await response.text();
+			logger.error(`API error ${response.status}: ${body}`);
 			if (response.status === 429) {
 				throw new Error("Rate limit exceeded");
 			}
