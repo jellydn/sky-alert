@@ -7,6 +7,7 @@ import {
 	getFlightByNumberAndDate,
 	trackFlight,
 } from "../services/flight-service.js";
+import { parseDate } from "../utils/flight-parser.js";
 import { logger } from "../utils/logger.js";
 
 const api = new AviationstackAPI();
@@ -25,7 +26,7 @@ bot.command("track", async (ctx: Context) => {
 	}
 
 	const flightNumber = args[0].toUpperCase();
-	const date = args[1];
+	const date = parseDate(args.slice(1).join(" ")) ?? args[1];
 
 	const chatId = ctx.chat?.id.toString();
 	if (!chatId) {

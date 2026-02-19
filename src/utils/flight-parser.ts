@@ -34,7 +34,7 @@ export function parseFlightInput(message: string): ParsedFlightInput {
 	return result;
 }
 
-function parseDate(message: string): string | null {
+export function parseDate(message: string): string | null {
 	const lowerMessage = message.toLowerCase();
 
 	const now = new Date();
