@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { startBot } from "./bot/index.js";
 import { db } from "./db/index.js";
+import { startCleanupWorker } from "./services/cleanup-service.js";
 import { startPollingWorker } from "./services/polling-service.js";
 
 console.log("SkyAlert - Real-time flight monitoring Telegram bot");
@@ -14,6 +15,9 @@ try {
 	console.error("✗ Database connection failed:", error);
 	process.exit(1);
 }
+
+// Start the cleanup worker
+startCleanupWorker();
 
 // Start the polling worker
 startPollingWorker();
