@@ -1,180 +1,121 @@
 # Codebase Concerns
 
 **Analysis Date:** 2026-02-19
+**Last Updated:** 2026-02-19
+
+## Status Summary
+
+### Resolved
+- Shared Aviationstack client instance now used across handlers/services (`aviationstackApi` singleton).
+- Graceful shutdown implemented (`SIGINT`/`SIGTERM` stop bot/workers and close DB).
+- `tracked_flights` now has DB-level unique constraint and atomic insert path.
+- Silent catch in `/status` replaced with warning log + user-facing stale-data note.
+- Cleanup worker N+1 pattern replaced with batch update/delete operations.
+- Core flight lookup indexes added (`flight_number + flight_date`, `scheduled_departure`).
+- Aviationstack cache now has a bounded size cap.
+- Startup DB failure fixed by ensuring `./data` directory exists before SQLite open.
+- `just` DB commands now use local drizzle-kit binary; migrate works reliably.
+
+### Partial
+- API usage race risk reduced with `onConflictDoNothing` in month record creation, but usage accounting is still eventually consistent under high concurrency.
+
+### Open
+- Pending selection state is still in-memory and lost on restart.
+- No per-user command rate limiting.
+- Handler-order fragility remains (natural-language handler must stay last).
+- Broad test quality gap remains (many tests are string/pattern checks, not handler/service integration behavior).
+- No health check endpoint.
+- No external error reporting.
+- No DB backup strategy.
 
 ## Tech Debt
 
-**Multiple AviationstackAPI Instance Creation:**
-- Issue: AviationstackAPI class instantiated 4 times in separate files (track.ts, natural-language.ts, polling-service.ts, status.ts) instead of using singleton pattern
-- Files: `src/handlers/track.ts:16`, `src/handlers/natural-language.ts:13`, `src/services/polling-service.ts:9`, `src/handlers/status.ts:11`
-- Impact: Each instance has its own cache Map, reducing cache effectiveness. Memory waste, potential cache inconsistencies
-- Fix approach: Export a single instance from aviationstack.ts or use dependency injection
-
-**No Graceful Shutdown:**
-- Issue: Application exits abruptly without cleaning up resources (database connections, pending operations, bot stop)
-- Files: `src/index.ts`
-- Impact: Potential data loss on shutdown, database corruption risk, in-flight operations dropped
-- Fix approach: Implement SIGINT/SIGTERM handlers to call stopBot(), close database, flush pending writes
-
-**In-Memory Pending Selections:**
-- Issue: User flight selection state stored in Map with no persistence
+**In-Memory Pending Selections (Open)**
 - Files: `src/utils/pending-selections.ts`
-- Impact: Lost on restart, users lose their selection state, poor UX
-- Fix approach: Store in SQLite with TTL expiration or use Redis
+- Impact: Selection state lost on restart; poor UX for multi-step flow
+- Next fix: Persist pending selections in SQLite with TTL cleanup
 
-## Known Bugs
+**Natural Language Import Order Dependency (Open)**
+- Files: `src/bot/index.ts`, `src/handlers/natural-language.ts`
+- Impact: Reordering imports can break command handlers silently
+- Next fix: Replace catch-all ordering dependency with explicit routing guard/middleware
 
-**Race Condition in recordRequest():**
-- Symptoms: Under concurrent requests, request count may be inaccurate
-- Files: `src/services/api-budget.ts:48-56`
-- Trigger: Multiple API requests in rapid succession
-- Workaround: None - unlikely to hit with current usage patterns
+## Known Bugs / Risks
 
-**Missing Unique Constraint on tracked_flights:**
-- Symptoms: Potential duplicate tracking entries if race condition occurs
-- Files: `src/db/schema.ts:27-36`
-- Trigger: User rapidly clicking track button or concurrent requests
-- Workaround: Code checks for existing before insert, but no DB-level protection
+**Migration History Drift (New)**
+- Files: `drizzle/0000_low_tyger_tiger.sql`, `drizzle/0000_bumpy_sunfire.sql`
+- Symptoms: Two `0000_*` baseline migrations exist and may cause confusion for fresh setups
+- Risk: Unclear canonical baseline for new environments
+- Next fix: Consolidate/clean migration history and document canonical migration path
 
-**Silent Catch Block:**
-- Symptoms: Errors during status refresh silently ignored, falling back to stale data
-- Files: `src/handlers/status.ts:100-102`
-- Trigger: API errors, network issues during manual status check
-- Workaround: Still shows cached data, but user not informed of refresh failure
+**Pending Selection Volatility (Open)**
+- Files: `src/utils/pending-selections.ts`
+- Trigger: Process restart or crash during selection window
+- Workaround: User must rerun lookup
 
 ## Security Considerations
 
-**No Rate Limiting on Bot Commands:**
-- Risk: Malicious user could spam commands, depleting API budget
-- Files: All handlers in `src/handlers/`
-- Current mitigation: API budget system prevents total exhaustion
-- Recommendations: Implement per-user rate limiting (e.g., max 10 commands/minute)
+**No Rate Limiting on Bot Commands (Open)**
+- Files: `src/handlers/`
+- Risk: Spam can deplete API budget
+- Current mitigation: Global monthly API budget guard
+- Next fix: Add per-chat token bucket/sliding window (e.g. 10 commands/minute)
 
-**API Key Exposure in Logs:**
-- Risk: API key visible in debug logs (partially masked)
-- Files: `src/services/aviationstack.ts:110`
-- Current mitigation: Key replaced with "***" in log output
-- Recommendations: Ensure LOG_LEVEL is not 'debug' in production
-
-**No Input Validation:**
-- Risk: Malformed flight numbers or routes could cause unexpected behavior
-- Files: `src/utils/flight-parser.ts`, all handlers
-- Current mitigation: Regex patterns filter input
-- Recommendations: Add explicit validation with user-friendly error messages
-
-**No Authorization Checks:**
-- Risk: Any user can track any flight, no user isolation concerns
-- Files: `src/handlers/remove.ts`, `src/handlers/status.ts`
-- Current mitigation: ChatId-based isolation (users can only see their own tracked flights)
-- Recommendations: Consider if flight data should be private per-user
+**API Key Logging Exposure (Open)**
+- Files: `src/services/aviationstack.ts`
+- Risk: URL logging in debug mode could still expose sensitive structure despite masking
+- Current mitigation: Key masking in debug output
+- Next fix: Avoid logging full query URLs in production paths
 
 ## Performance Bottlenecks
 
-**N+1 Query Pattern in Cleanup Service:**
-- Problem: Iterating over flights one-by-one for updates/deletes instead of batch operations
-- Files: `src/services/cleanup-service.ts:38-58`
-- Cause: Sequential database operations in for loop
-- Improvement path: Use batch UPDATE/DELETE with WHERE IN clause
+**Single-Threaded Polling (Open)**
+- Files: `src/services/polling-service.ts`
+- Risk: Poll backlog at higher tracked-flight volume
+- Next fix: Add bounded concurrency queue
 
-**No Database Indexes:**
-- Problem: Queries on flight_number + flight_date combination not indexed
-- Files: `src/db/schema.ts`
-- Cause: Default Drizzle schema without explicit indexes
-- Improvement path: Add composite index on (flight_number, flight_date), index on scheduled_departure
-
-**Unbounded In-Memory Cache:**
-- Problem: AviationstackAPI cache Map has no size limit, could grow unbounded
-- Files: `src/services/aviationstack.ts:79`
-- Cause: No eviction policy implemented
-- Improvement path: Implement LRU cache with max size or use third-party cache library
-
-## Fragile Areas
-
-**Natural Language Handler Order Dependency:**
-- Files: `src/bot/index.ts:16`, `src/handlers/natural-language.ts`
-- Why fragile: Uses `bot.on("message:text")` which catches ALL text messages. Must be imported last or commands break
-- Safe modification: Never reorder imports, add new command handlers before natural-language import
-- Test coverage: None - behavior changes could break silently
-
-**Pending Selections Memory State:**
-- Files: `src/utils/pending-selections.ts`
-- Why fragile: State lost on restart, timeout uses setTimeout (cleared on process exit)
-- Safe modification: Add persistence layer before changing timeout logic
-- Test coverage: None
-
-**Multiple Flight Service Entry Points:**
-- Files: `src/handlers/track.ts:118`, `src/handlers/natural-language.ts:117`
-- Why fragile: saveAndConfirmFlight exported and called from multiple places, could diverge in behavior
-- Safe modification: Keep both callers synchronized with same error handling
-- Test coverage: None
+**In-Memory Cache Policy Simplicity (Partial)**
+- Files: `src/services/aviationstack.ts`
+- Status: Now bounded by max entries, but eviction is FIFO by insertion order (not true LRU)
+- Next fix: Implement LRU or TTL+size strategy with explicit metrics
 
 ## Scaling Limits
 
-**API Budget Constraint:**
-- Current capacity: 100 requests/month (Aviationstack free tier)
-- Limit: With polling enabled, can only track ~10-20 flights per month actively
-- Scaling path: Upgrade to paid Aviationstack tier ($50+/month) or add multiple API keys with rotation
+**Aviationstack Free Tier (Open)**
+- Limit: 100 requests/month
+- Impact: Very limited active tracking capacity with polling enabled
+- Path: Paid tier or provider abstraction/fallback
 
-**Single-Threaded Polling:**
-- Current capacity: Sequential flight polling with intervals
-- Limit: With hundreds of flights, polling queue could lag behind schedule
-- Scaling path: Implement parallel polling with concurrency limit, or use job queue
+**SQLite Single-Instance Constraints (Open)**
+- Limit: File-based DB is not ideal for multi-instance horizontal scaling
+- Path: Move to PostgreSQL for shared deployment scenarios
 
-**SQLite Database:**
-- Current capacity: Single file database, works for single instance
-- Limit: Cannot scale horizontally, file locking contention under high write load
-- Scaling path: Migrate to PostgreSQL for multi-instance deployment
+## Dependencies / Tooling Risks
 
-## Dependencies at Risk
-
-**Aviationstack API:**
-- Risk: Free tier extremely limited (100 requests/month), API could change or be discontinued
-- Impact: Core functionality broken, no flight data
-- Migration plan: Consider alternative APIs (FlightAware, OpenSky) or implement fallback sources
-
-**Bun Runtime:**
-- Risk: Bun-specific database module (`bun:sqlite`) ties application to Bun
-- Impact: Cannot run on Node.js, limits deployment options
-- Migration plan: Switch to better-sqlite3 (works on both) or libsql
-
-**Grammy Framework:**
-- Risk: Relatively newer framework, smaller community than telegraf
-- Impact: Fewer resources for troubleshooting, potential breaking changes
-- Migration plan: Stable API so far, monitor for deprecations
+**Drizzle CLI Runtime Resolution (Open)**
+- Context: `bunx drizzle-kit ...` had runtime dependency resolution issues in this environment
+- Current mitigation: project uses `./node_modules/.bin/drizzle-kit` in `justfile` and `package.json`
+- Next fix: Document this convention in README/AGENTS to avoid regressions
 
 ## Missing Critical Features
 
-**No Test Suite:**
-- Problem: Zero test coverage on any functionality
-- Blocks: Confident refactoring, CI/CD validation, regression prevention
+**No Health Check Endpoint (Open)**
+- Blocks: Monitoring/ops readiness
 
-**No Health Check Endpoint:**
-- Problem: No way to verify bot is running and healthy
-- Blocks: Proper monitoring, Kubernetes deployment, uptime tracking
+**No External Error Reporting (Open)**
+- Blocks: Production issue visibility
 
-**No Error Reporting:**
-- Problem: Errors only logged locally, no external error tracking
-- Blocks: Visibility into production issues, error trend analysis
-
-**No Database Backup:**
-- Problem: SQLite database not backed up
-- Blocks: Recovery from data loss scenarios
+**No Automated Backup Plan (Open)**
+- Blocks: Recovery guarantees for SQLite data
 
 ## Test Coverage Gaps
 
-**All Core Functionality Untested:**
-- What's not tested: All handlers, services, utilities
-- Files: All `.ts` files in `src/`
-- Risk: Refactoring or feature additions could break existing behavior
-- Priority: High - Start with flight-service.ts and api-budget.ts (core logic)
-
-**Specific Untested Areas:**
-- Date parsing logic in flight-parser.ts (complex regex and date math)
-- Cache expiration in aviationstack.ts
-- Polling intervals and budget checking
-- Cleanup service deletion logic
-- Error handling paths in all handlers
+**High-Risk Areas Still Under-Tested (Open)**
+- `src/services/api-budget.ts` concurrency and budget edge cases
+- `src/services/polling-service.ts` scheduling/interval behavior
+- `src/services/cleanup-service.ts` batch cleanup correctness
+- `src/handlers/status.ts` refresh-failure path and stale-data messaging
 
 ---
 
-*Concerns audit: 2026-02-19*
+*Concerns audit updated: 2026-02-19*
