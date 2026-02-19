@@ -1,6 +1,28 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Context } from "grammy";
 
+function shouldUseFallback(status: string, delayMinutes?: number): boolean {
+	return (!delayMinutes || delayMinutes <= 0) && (status === "scheduled" || status.length === 0);
+}
+
+function addMinutesToIso(isoString: string, minutes: number): string | undefined {
+	const baseTimeMs = Date.parse(isoString);
+	if (Number.isNaN(baseTimeMs)) {
+		return undefined;
+	}
+
+	return new Date(baseTimeMs + minutes * 60 * 1000).toISOString();
+}
+
+function parseCarrierAndNumber(flightCode: string): { carrier?: string; number?: string } {
+	const match = flightCode.match(/^([A-Z]{2,3})(\d{1,4})$/);
+	if (!match) {
+		return {};
+	}
+
+	return { carrier: match[1], number: match[2] };
+}
+
 const mockReply = mock(() => Promise.resolve({ message_id: 1 }));
 
 const mockContext = {
@@ -59,63 +81,113 @@ describe("status handler", () => {
 		}));
 	});
 
+	describe("shouldUseFallback", () => {
+		test("should return true when status is scheduled and no delay", () => {
+			expect(shouldUseFallback("scheduled", undefined)).toBe(true);
+		});
+
+		test("should return true when status is scheduled and delay is zero", () => {
+			expect(shouldUseFallback("scheduled", 0)).toBe(true);
+		});
+
+		test("should return true when status is empty and no delay", () => {
+			expect(shouldUseFallback("", undefined)).toBe(true);
+		});
+
+		test("should return false when status is active", () => {
+			expect(shouldUseFallback("departed", undefined)).toBe(false);
+		});
+
+		test("should return false when delay is positive", () => {
+			expect(shouldUseFallback("scheduled", 15)).toBe(false);
+		});
+
+		test("should return false when status is active and delay is positive", () => {
+			expect(shouldUseFallback("in air", 10)).toBe(false);
+		});
+	});
+
+	describe("addMinutesToIso", () => {
+		test("should add minutes to valid ISO string", () => {
+			expect(addMinutesToIso("2026-02-19T14:00:00Z", 30)).toBe("2026-02-19T14:30:00.000Z");
+		});
+
+		test("should subtract minutes when value is negative", () => {
+			expect(addMinutesToIso("2026-02-19T14:30:00Z", -15)).toBe("2026-02-19T14:15:00.000Z");
+		});
+
+		test("should return undefined for invalid ISO string", () => {
+			expect(addMinutesToIso("invalid-date", 30)).toBeUndefined();
+		});
+
+		test("should handle zero minutes", () => {
+			expect(addMinutesToIso("2026-02-19T14:00:00Z", 0)).toBe("2026-02-19T14:00:00.000Z");
+		});
+	});
+
+	describe("parseCarrierAndNumber", () => {
+		test("should parse valid 2-letter carrier with flight number", () => {
+			expect(parseCarrierAndNumber("AA123")).toEqual({ carrier: "AA", number: "123" });
+		});
+
+		test("should parse valid 3-letter carrier with flight number", () => {
+			expect(parseCarrierAndNumber("UAL456")).toEqual({ carrier: "UAL", number: "456" });
+		});
+
+		test("should parse single digit flight number", () => {
+			expect(parseCarrierAndNumber("UA1")).toEqual({ carrier: "UA", number: "1" });
+		});
+
+		test("should parse 4-digit flight number", () => {
+			expect(parseCarrierAndNumber("DL1234")).toEqual({ carrier: "DL", number: "1234" });
+		});
+
+		test("should return empty object for invalid format", () => {
+			expect(parseCarrierAndNumber("INVALID")).toEqual({});
+		});
+
+		test("should return empty object for lowercase carrier", () => {
+			expect(parseCarrierAndNumber("aa123")).toEqual({});
+		});
+
+		test("should return empty object for carrier with numbers", () => {
+			expect(parseCarrierAndNumber("A1123")).toEqual({});
+		});
+
+		test("should return empty object for missing number", () => {
+			expect(parseCarrierAndNumber("AA")).toEqual({});
+		});
+	});
+
 	describe("/status command validation", () => {
 		test("should show error when missing flight number", () => {
 			const context = {
 				...mockContext,
 				match: "",
 			} as Context;
-
 			const matchValue = context.match ?? "";
 			const hasFlightNumber = matchValue.toString().trim().length > 0;
-
 			expect(hasFlightNumber).toBe(false);
 		});
 
-		test("should show error when flight not in tracked list", async () => {
+		test("should show error when flight not in tracked list", () => {
 			const userTrackings = [];
-
-			expect(userTrackings.length).toBe(0);
+			const hasTracking = userTrackings.length > 0;
+			expect(hasTracking).toBe(false);
 		});
 	});
 
 	describe("data refresh behavior", () => {
 		test("should calculate staleness correctly", () => {
 			const lastPolled = Date.now() - STALE_THRESHOLD - 1000;
-			const isStale = Date.now() - lastPolled > STALE_THRESHOLD;
-
+			const isStale = Date.now() - lastPolled >= STALE_THRESHOLD;
 			expect(isStale).toBe(true);
 		});
 
 		test("should identify fresh data", () => {
 			const lastPolled = Date.now() - 5 * 60 * 1000;
-			const isStale = Date.now() - lastPolled > STALE_THRESHOLD;
-
+			const isStale = Date.now() - lastPolled >= STALE_THRESHOLD;
 			expect(isStale).toBe(false);
-		});
-
-		test("should recognize completed flight statuses", () => {
-			const completedStatuses = ["landed", "cancelled"];
-
-			expect(completedStatuses).toContain("landed");
-			expect(completedStatuses).toContain("cancelled");
-			expect(completedStatuses).not.toContain("scheduled");
-		});
-	});
-
-	describe("status change recording", () => {
-		test("should create status change record when status changes", () => {
-			const oldStatus = "scheduled";
-			const newStatus = "departed";
-
-			expect(oldStatus).not.toBe(newStatus);
-		});
-
-		test("should not create record when status unchanged", () => {
-			const oldStatus = "scheduled";
-			const newStatus = "scheduled";
-
-			expect(oldStatus).toBe(newStatus);
 		});
 	});
 
@@ -127,9 +199,7 @@ describe("status handler", () => {
 				destination: "LAX",
 				flightDate: "2026-02-19",
 			};
-
 			const header = `✈️ *${flight.flightNumber}*\n\n📍 ${flight.origin} → ${flight.destination}\n📅 ${flight.flightDate}`;
-
 			expect(header).toContain("✈️");
 			expect(header).toContain(flight.flightNumber);
 			expect(header).toContain(flight.origin);
@@ -146,14 +216,12 @@ describe("status handler", () => {
 				terminal: "2",
 				delayMinutes: 15,
 			};
-
 			let departureSection = "*Departure:*\n";
 			departureSection += `   Scheduled: ${flight.scheduledDeparture} (${flight.origin})\n`;
 			departureSection += `   Status: ${flight.currentStatus}\n`;
 			departureSection += `   🚪 Gate: ${flight.gate}\n`;
 			departureSection += `   🏢 Terminal: ${flight.terminal}\n`;
 			departureSection += `   ⏱️ Delay: ${flight.delayMinutes} min\n`;
-
 			expect(departureSection).toContain("Departure:");
 			expect(departureSection).toContain("Scheduled:");
 			expect(departureSection).toContain(flight.origin);
@@ -168,9 +236,7 @@ describe("status handler", () => {
 				scheduledArrival: "2026-02-19T16:00:00+00:00",
 				destination: "LAX",
 			};
-
 			const arrivalSection = `*Arrival:*\n   Scheduled: ${flight.scheduledArrival} (${flight.destination})`;
-
 			expect(arrivalSection).toContain("Arrival:");
 			expect(arrivalSection).toContain(flight.scheduledArrival);
 			expect(arrivalSection).toContain(flight.destination);
@@ -191,7 +257,6 @@ describe("status handler", () => {
 					detectedAt: Date.now() / 1000,
 				},
 			];
-
 			let changesSection = "*Recent Status Changes:*\n";
 			changes.forEach((change) => {
 				const detectedTime = new Date(change.detectedAt * 1000);
@@ -209,7 +274,6 @@ describe("status handler", () => {
 				}
 				changesSection += "\n";
 			});
-
 			expect(changesSection).toContain("Recent Status Changes");
 			expect(changesSection).toContain("scheduled");
 			expect(changesSection).toContain("departed");
@@ -220,7 +284,6 @@ describe("status handler", () => {
 			const lastPolledAt = Math.floor(Date.now() / 1000);
 			const ago = Math.round((Date.now() - lastPolledAt * 1000) / 60000);
 			const timestamp = `_Updated ${ago} min ago_`;
-
 			expect(timestamp).toContain("Updated");
 			expect(timestamp).toContain("min ago");
 		});
@@ -229,33 +292,32 @@ describe("status handler", () => {
 	describe("conditional field display", () => {
 		test("should show gate when present", () => {
 			const gate = "D10";
-
-			expect(gate).toBeDefined();
+			const hasGate = gate !== undefined && gate.length > 0;
+			expect(hasGate).toBe(true);
 		});
 
 		test("should show terminal when present", () => {
 			const terminal = "2";
-
-			expect(terminal).toBeDefined();
+			const hasTerminal = terminal !== undefined && terminal.length > 0;
+			expect(hasTerminal).toBe(true);
 		});
 
 		test("should show delay when greater than 0", () => {
 			const delayMinutes = 15;
-
-			expect(delayMinutes).toBeGreaterThan(0);
+			const shouldShowDelay = delayMinutes > 0;
+			expect(shouldShowDelay).toBe(true);
 		});
 
 		test("should not show delay when 0", () => {
 			const delayMinutes = 0;
-
-			expect(delayMinutes).toBe(0);
+			const shouldShowDelay = delayMinutes > 0;
+			expect(shouldShowDelay).toBe(false);
 		});
 	});
 
 	describe("error handling", () => {
 		test("should handle database errors gracefully", () => {
 			const errorMessage = "❌ Failed to retrieve flight status. Please try again later.";
-
 			expect(errorMessage).toContain("Failed to retrieve");
 			expect(errorMessage).toContain("try again later");
 		});
@@ -263,23 +325,7 @@ describe("status handler", () => {
 		test("should fall back to cached data on API failure", () => {
 			const apiError = true;
 			const hasCachedData = true;
-
 			expect(apiError || hasCachedData).toBeDefined();
-		});
-	});
-
-	describe("input normalization", () => {
-		test("should uppercase flight number", () => {
-			const input = "ua1234";
-			const result = input.toUpperCase();
-
-			expect(result).toBe("UA1234");
-		});
-
-		test("should extract chat id from context", () => {
-			const chatId = mockContext.chat?.id.toString();
-
-			expect(chatId).toBe("123456");
 		});
 	});
 });
