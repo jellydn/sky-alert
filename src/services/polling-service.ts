@@ -8,11 +8,11 @@ import { AviationstackAPI } from "./aviationstack.js";
 
 const api = new AviationstackAPI();
 
-const POLL_INTERVAL_FAR = 15 * 60 * 1000; // 15 minutes (> 3 hours from departure)
-const POLL_INTERVAL_NEAR = 5 * 60 * 1000; // 5 minutes (1-3 hours from departure)
-const POLL_INTERVAL_IMMINENT = 1 * 60 * 1000; // 1 minute (< 1 hour from departure)
+const POLL_INTERVAL_FAR = 15 * 60 * 1000;
+const POLL_INTERVAL_NEAR = 5 * 60 * 1000;
+const POLL_INTERVAL_IMMINENT = 1 * 60 * 1000;
 const HOURS_BEFORE_START_POLLING = 6;
-const WORKER_CHECK_INTERVAL = 1 * 60 * 1000; // check every minute
+const WORKER_CHECK_INTERVAL = 1 * 60 * 1000;
 
 export function startPollingWorker() {
 	logger.info("✓ Starting polling worker (budget-aware)");
@@ -25,8 +25,7 @@ export function startPollingWorker() {
 }
 
 function getPollInterval(scheduledDeparture: Date, now: Date): number {
-	const hoursUntilDeparture =
-		(scheduledDeparture.getTime() - now.getTime()) / (60 * 60 * 1000);
+	const hoursUntilDeparture = (scheduledDeparture.getTime() - now.getTime()) / (60 * 60 * 1000);
 
 	if (hoursUntilDeparture <= 1) return POLL_INTERVAL_IMMINENT;
 	if (hoursUntilDeparture <= 3) return POLL_INTERVAL_NEAR;
@@ -36,22 +35,14 @@ function getPollInterval(scheduledDeparture: Date, now: Date): number {
 async function pollFlights() {
 	try {
 		const now = new Date();
-		const sixHoursFromNow = new Date(
-			now.getTime() + HOURS_BEFORE_START_POLLING * 60 * 60 * 1000,
-		);
+		const sixHoursFromNow = new Date(now.getTime() + HOURS_BEFORE_START_POLLING * 60 * 60 * 1000);
 
-		const activeFlights = await db
-			.select()
-			.from(flights)
-			.where(eq(flights.isActive, true));
+		const activeFlights = await db.select().from(flights).where(eq(flights.isActive, true));
 
 		for (const flight of activeFlights) {
 			const scheduledDeparture = new Date(flight.scheduledDeparture);
 
-			if (
-				flight.currentStatus === "landed" ||
-				flight.currentStatus === "cancelled"
-			) {
+			if (flight.currentStatus === "landed" || flight.currentStatus === "cancelled") {
 				continue;
 			}
 
@@ -74,68 +65,67 @@ async function pollFlights() {
 	}
 }
 
-async function pollFlight(
-	flightId: number,
-	flightNumber: string,
-	flightDate: string,
-) {
+async function pollFlight(flightId: number, flightNumber: string, flightDate: string) {
 	try {
-		const currentFlight = await db
-			.select()
-			.from(flights)
-			.where(eq(flights.id, flightId))
-			.limit(1);
+		const currentFlight = await db.select().from(flights).where(eq(flights.id, flightId)).limit(1);
 
 		if (currentFlight.length === 0) {
 			return;
 		}
 
 		const flight = currentFlight[0];
-		const apiFlight = await api.getFlightByNumber(flightNumber, flightDate);
+		const apiFlights = await api.getFlightsByNumber(flightNumber, flightDate);
 
-		if (!apiFlight) {
+		if (apiFlights.length === 0) {
 			return;
 		}
 
-		const oldStatus = flight.currentStatus;
-		const newStatus = apiFlight.flight_status;
-		const oldGate = flight.gate;
-		const newGate = apiFlight.departure.gate;
-		const oldTerminal = flight.terminal;
-		const newTerminal = apiFlight.departure.terminal;
-		const oldDelay = flight.delayMinutes;
-		const newDelay = apiFlight.departure.delay;
+		const apiFlight = apiFlights[0];
 
-		const statusChanged = oldStatus !== newStatus;
-		const gateChanged = oldGate !== newGate && newGate !== undefined;
-		const terminalChanged =
-			oldTerminal !== newTerminal && newTerminal !== undefined;
-		const delayChanged = oldDelay !== newDelay;
+		const changes: { field: string; from: string; to: string }[] = [];
 
-		if (statusChanged || gateChanged || terminalChanged) {
-			let details = "";
+		if (flight.currentStatus !== apiFlight.flight_status) {
+			changes.push({
+				field: "Status",
+				from: flight.currentStatus || "N/A",
+				to: apiFlight.flight_status,
+			});
+			await db.insert(statusChanges).values({
+				flightId,
+				oldStatus: flight.currentStatus,
+				newStatus: apiFlight.flight_status,
+			});
+		}
 
-			if (statusChanged) {
-				await db.insert(statusChanges).values({
-					flightId,
-					oldStatus,
-					newStatus,
-					details: undefined,
-				});
-			}
+		if (flight.gate !== apiFlight.departure.gate && apiFlight.departure.gate) {
+			changes.push({
+				field: "Gate",
+				from: flight.gate || "N/A",
+				to: apiFlight.departure.gate,
+			});
+		}
 
-			if (delayChanged && newDelay && newDelay > 0) {
-				details += `Delay: ${newDelay} min\n`;
-			}
+		if (flight.terminal !== apiFlight.departure.terminal && apiFlight.departure.terminal) {
+			changes.push({
+				field: "Terminal",
+				from: flight.terminal || "N/A",
+				to: apiFlight.departure.terminal,
+			});
+		}
 
-			if (gateChanged) {
-				details += `Gate: ${oldGate || "N/A"} → ${newGate}\n`;
-			}
+		if (
+			flight.delayMinutes !== apiFlight.departure.delay &&
+			apiFlight.departure.delay &&
+			apiFlight.departure.delay > 0
+		) {
+			changes.push({
+				field: "Delay",
+				from: `${flight.delayMinutes || 0} min`,
+				to: `${apiFlight.departure.delay} min`,
+			});
+		}
 
-			if (terminalChanged) {
-				details += `Terminal: ${oldTerminal || "N/A"} → ${newTerminal}\n`;
-			}
-
+		if (changes.length > 0) {
 			const trackers = await db
 				.select()
 				.from(trackedFlights)
@@ -143,13 +133,8 @@ async function pollFlight(
 
 			for (const tracker of trackers) {
 				let message = `🚨 *${flightNumber} Update*\n\n`;
-
-				if (statusChanged) {
-					message += `Status: ${oldStatus || "N/A"} → ${newStatus}\n`;
-				}
-
-				if (details) {
-					message += `\n${details}`;
+				for (const change of changes) {
+					message += `${change.field}: ${change.from} → ${change.to}\n`;
 				}
 
 				try {

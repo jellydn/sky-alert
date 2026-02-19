@@ -37,12 +37,7 @@ bot.command("remove", async (ctx: Context) => {
 			})
 			.from(trackedFlights)
 			.innerJoin(flights, eq(trackedFlights.flightId, flights.id))
-			.where(
-				and(
-					eq(trackedFlights.chatId, chatId),
-					eq(flights.flightNumber, flightNumber),
-				),
-			);
+			.where(and(eq(trackedFlights.chatId, chatId), eq(flights.flightNumber, flightNumber)));
 
 		if (userTrackings.length === 0) {
 			await ctx.reply(
@@ -59,10 +54,7 @@ bot.command("remove", async (ctx: Context) => {
 		await db
 			.delete(trackedFlights)
 			.where(
-				and(
-					eq(trackedFlights.chatId, chatId),
-					eq(trackedFlights.flightId, tracking.flightId),
-				),
+				and(eq(trackedFlights.chatId, chatId), eq(trackedFlights.flightId, tracking.flightId)),
 			);
 
 		const otherTrackers = await db.query.trackedFlights.findMany({
@@ -70,10 +62,7 @@ bot.command("remove", async (ctx: Context) => {
 		});
 
 		if (otherTrackers.length === 0) {
-			await db
-				.update(flights)
-				.set({ isActive: false })
-				.where(eq(flights.id, tracking.flightId));
+			await db.update(flights).set({ isActive: false }).where(eq(flights.id, tracking.flightId));
 		}
 
 		await ctx.reply(

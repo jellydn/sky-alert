@@ -10,7 +10,7 @@
 
 ## Features
 
-- **Track flights** by flight number, natural language, or route (e.g., `SFO to LAX today`)
+- **Track flights** by flight number, natural language, or route (e.g., `DAD to SIN today`)
 - **Real-time alerts** — check-in open, delays, gate changes, boarding, departure, landing, cancellation
 - **Adaptive polling** — every 5 min normally, every 1 min near departure
 - **Multi-user** — multiple users can track the same flight with deduplicated API calls
@@ -77,8 +77,8 @@ bun run lint
 
 The bot also understands natural language:
 
-- `Track my flight AA123 tomorrow`
-- `SFO to LAX today`
+- `Track my flight GA851 tomorrow`
+- `DAD to SIN today`
 
 ## Architecture
 

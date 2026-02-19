@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { apiUsage } from "../db/schema.js";
 
@@ -18,10 +18,7 @@ async function getOrCreateMonthRecord() {
 
 	if (existing) return existing;
 
-	const result = await db
-		.insert(apiUsage)
-		.values({ month, requestCount: 0 })
-		.returning();
+	const result = await db.insert(apiUsage).values({ month, requestCount: 0 }).returning();
 
 	return result[0];
 }
@@ -47,10 +44,12 @@ export async function canMakeRequest(): Promise<boolean> {
 
 export async function recordRequest(): Promise<void> {
 	const month = getCurrentMonth();
+	// Ensure record exists before incrementing
+	await getOrCreateMonthRecord();
 	await db
 		.update(apiUsage)
 		.set({
-			requestCount: (await getOrCreateMonthRecord()).requestCount + 1,
+			requestCount: sql`${apiUsage.requestCount} + 1`,
 			lastRequestAt: new Date(),
 		})
 		.where(eq(apiUsage.month, month));

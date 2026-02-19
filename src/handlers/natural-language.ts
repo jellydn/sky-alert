@@ -1,7 +1,9 @@
 import type { Context } from "grammy";
 import { bot } from "../bot/instance.js";
 import { AviationstackAPI } from "../services/aviationstack.js";
+import { handleApiError } from "../utils/api-error-handler.js";
 import { parseFlightInput } from "../utils/flight-parser.js";
+import { formatFlightListMessage } from "../utils/format-flight-list.js";
 import { logger } from "../utils/logger.js";
 import {
 	clearPendingSelection,
@@ -11,6 +13,10 @@ import {
 import { saveAndConfirmFlight } from "./track.js";
 
 const api = new AviationstackAPI();
+
+const SELECTION_EXPIRED_MESSAGE =
+	"❓ Selection expired or invalid.\n\n" +
+	"Please search for flights again using: `SFO to LAX today`";
 
 bot.on("message:text", async (ctx: Context) => {
 	const message = ctx.message?.text;
@@ -29,11 +35,7 @@ bot.on("message:text", async (ctx: Context) => {
 		);
 
 		try {
-			const flights = await api.getFlightsByRoute(
-				parsed.origin,
-				parsed.destination,
-				date,
-			);
+			const flights = await api.getFlightsByRoute(parsed.origin, parsed.destination, date);
 
 			if (flights.length === 0) {
 				await ctx.reply(
@@ -55,37 +57,14 @@ bot.on("message:text", async (ctx: Context) => {
 			}
 
 			const limitedFlights = flights.slice(0, 5);
-
-			let flightList = `✈️ *Found ${limitedFlights.length} flight(s)*\n\n`;
-			limitedFlights.forEach((flight, index) => {
-				const departureTime = new Date(flight.departure.scheduled);
-				flightList += `${index + 1}. *${flight.flight.iata}*\n`;
-				flightList += `   ${flight.airline.name}\n`;
-				flightList += `   ${departureTime.toLocaleTimeString("en-US", {
-					hour: "2-digit",
-					minute: "2-digit",
-				})}\n\n`;
-			});
-
-			flightList += "Reply with the number (1-5) to track a flight.";
+			const flightList = formatFlightListMessage(limitedFlights);
 
 			await ctx.reply(flightList, { parse_mode: "Markdown" });
 
 			setPendingSelection(chatId, limitedFlights);
 		} catch (error) {
-			if (error instanceof Error) {
-				if (error.message === "Rate limit exceeded") {
-					await ctx.reply(
-						"⚠️ *Rate limit exceeded*\n\n" + "Please try again later.",
-						{ parse_mode: "Markdown" },
-					);
-					return;
-				}
-				logger.error("Error looking up flights:", error);
-				await ctx.reply(
-					"❌ Failed to look up flights. Please try again later.",
-				);
-			}
+			logger.error("Error looking up flights:", error);
+			await handleApiError(ctx, error);
 		}
 		return;
 	}
@@ -98,37 +77,33 @@ bot.on("message:text", async (ctx: Context) => {
 	const pendingSelection = getPendingSelection(chatId);
 
 	if (pendingSelection) {
-		const selection = message.trim();
+		const selectionNumber = parseInt(message.trim(), 10);
+		const isValidSelection =
+			!Number.isNaN(selectionNumber) && selectionNumber >= 1 && selectionNumber <= 5;
 
-		const selectionNumber = parseInt(selection, 10);
+		if (!isValidSelection) {
+			clearPendingSelection(chatId);
+			await ctx.reply(SELECTION_EXPIRED_MESSAGE, { parse_mode: "Markdown" });
+			return;
+		}
 
-		if (
-			!Number.isNaN(selectionNumber) &&
-			selectionNumber >= 1 &&
-			selectionNumber <= 5
-		) {
-			const selectedIndex = selectionNumber - 1;
-			const selectedFlight = pendingSelection.flights[selectedIndex];
+		const selectedIndex = selectionNumber - 1;
+		const selectedFlight = pendingSelection.flights[selectedIndex];
 
-			if (selectedFlight) {
-				clearPendingSelection(chatId);
+		if (selectedFlight) {
+			clearPendingSelection(chatId);
 
-				try {
-					await saveAndConfirmFlight(ctx, chatId, selectedFlight);
-				} catch (error) {
-					logger.error("Error tracking flight:", error);
-					await ctx.reply("❌ Failed to track flight. Please try again later.");
-				}
-				return;
+			try {
+				await saveAndConfirmFlight(ctx, chatId, selectedFlight);
+			} catch (error) {
+				logger.error("Error tracking flight:", error);
+				await handleApiError(ctx, error);
 			}
+			return;
 		}
 
 		clearPendingSelection(chatId);
-		await ctx.reply(
-			"❓ Selection expired or invalid.\n\n" +
-				"Please search for flights again using: `SFO to LAX today`",
-			{ parse_mode: "Markdown" },
-		);
+		await ctx.reply(SELECTION_EXPIRED_MESSAGE, { parse_mode: "Markdown" });
 		return;
 	}
 
@@ -136,10 +111,7 @@ bot.on("message:text", async (ctx: Context) => {
 		await ctx.reply("🔍 Looking up flight...");
 
 		try {
-			const apiFlights = await api.getFlightsByNumber(
-				parsed.flightNumber,
-				parsed.date,
-			);
+			const apiFlights = await api.getFlightsByNumber(parsed.flightNumber, parsed.date);
 
 			if (apiFlights.length === 0) {
 				await ctx.reply(
@@ -152,17 +124,7 @@ bot.on("message:text", async (ctx: Context) => {
 
 			if (apiFlights.length > 1) {
 				const limitedFlights = apiFlights.slice(0, 5);
-				let message = `✈️ *Found ${limitedFlights.length} flights for ${parsed.flightNumber}*\n\n`;
-				for (let i = 0; i < limitedFlights.length; i++) {
-					const f = limitedFlights[i];
-					const depTime = new Date(f.departure.scheduled);
-					message += `${i + 1}. ${f.departure.iata} → ${f.arrival.iata}\n`;
-					message += `   🛫 ${depTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
-					if (f.departure.terminal)
-						message += ` Terminal ${f.departure.terminal}`;
-					message += `\n   📊 ${f.flight_status}\n\n`;
-				}
-				message += "Reply with the number (1-5) to track a flight.";
+				const message = formatFlightListMessage(limitedFlights, parsed.flightNumber);
 				await ctx.reply(message, { parse_mode: "Markdown" });
 				setPendingSelection(chatId, limitedFlights);
 				return;
@@ -170,17 +132,8 @@ bot.on("message:text", async (ctx: Context) => {
 
 			await saveAndConfirmFlight(ctx, chatId, apiFlights[0]);
 		} catch (error) {
-			if (error instanceof Error) {
-				if (error.message === "Rate limit exceeded") {
-					await ctx.reply(
-						"⚠️ *Rate limit exceeded*\n\n" + "Please try again later.",
-						{ parse_mode: "Markdown" },
-					);
-					return;
-				}
-				logger.error("Error tracking flight:", error);
-				await ctx.reply("❌ Failed to track flight. Please try again later.");
-			}
+			logger.error("Error tracking flight:", error);
+			await handleApiError(ctx, error);
 		}
 	} else if (parsed.flightNumber && !parsed.date) {
 		await ctx.reply(

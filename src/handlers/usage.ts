@@ -1,9 +1,5 @@
 import { bot } from "../bot/instance.js";
-import {
-	formatUsageMessage,
-	getUsage,
-	isPollingEnabled,
-} from "../services/api-budget.js";
+import { formatUsageMessage, getUsage, isPollingEnabled } from "../services/api-budget.js";
 import { logger } from "../utils/logger.js";
 
 bot.command("usage", async (ctx) => {
@@ -15,8 +11,7 @@ bot.command("usage", async (ctx) => {
 		message += `🔄 Background polling: ${pollingActive ? "✅ Active" : "⏸️ Paused (budget low)"}\n`;
 
 		if (remaining <= 10) {
-			message +=
-				"\n⚠️ *Low budget!* Only on-demand `/status` checks will use API calls.";
+			message += "\n⚠️ *Low budget!* Only on-demand `/status` checks will use API calls.";
 		}
 
 		await ctx.reply(message, { parse_mode: "Markdown" });

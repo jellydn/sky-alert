@@ -15,9 +15,7 @@ export const flights = sqliteTable("flights", {
 	delayMinutes: integer("delay_minutes"),
 	lastPolledAt: integer("last_polled_at"),
 	isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-	createdAt: integer("created_at", { mode: "timestamp" })
-		.notNull()
-		.default(sql`(unixepoch())`),
+	createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 	updatedAt: integer("updated_at", { mode: "timestamp" })
 		.notNull()
 		.default(sql`(unixepoch())`)
@@ -30,9 +28,7 @@ export const trackedFlights = sqliteTable("tracked_flights", {
 	flightId: integer("flight_id")
 		.notNull()
 		.references(() => flights.id, { onDelete: "cascade" }),
-	createdAt: integer("created_at", { mode: "timestamp" })
-		.notNull()
-		.default(sql`(unixepoch())`),
+	createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
 
 export const apiUsage = sqliteTable("api_usage", {
@@ -50,7 +46,5 @@ export const statusChanges = sqliteTable("status_changes", {
 	oldStatus: text("old_status"),
 	newStatus: text("new_status").notNull(),
 	details: text("details"),
-	detectedAt: integer("detected_at", { mode: "timestamp" })
-		.notNull()
-		.default(sql`(unixepoch())`),
+	detectedAt: integer("detected_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });

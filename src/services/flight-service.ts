@@ -42,24 +42,15 @@ export async function getFlightById(id: number) {
 	});
 }
 
-export async function getFlightByNumberAndDate(
-	flightNumber: string,
-	flightDate: string,
-) {
+export async function getFlightByNumberAndDate(flightNumber: string, flightDate: string) {
 	return db.query.flights.findFirst({
-		where: and(
-			eq(flights.flightNumber, flightNumber),
-			eq(flights.flightDate, flightDate),
-		),
+		where: and(eq(flights.flightNumber, flightNumber), eq(flights.flightDate, flightDate)),
 	});
 }
 
 export async function trackFlight(chatId: string, flightId: number) {
 	const existing = await db.query.trackedFlights.findFirst({
-		where: and(
-			eq(trackedFlights.chatId, chatId),
-			eq(trackedFlights.flightId, flightId),
-		),
+		where: and(eq(trackedFlights.chatId, chatId), eq(trackedFlights.flightId, flightId)),
 	});
 
 	if (existing) {
@@ -77,28 +68,18 @@ export async function trackFlight(chatId: string, flightId: number) {
 export async function untrackFlight(chatId: string, flightId: number) {
 	await db
 		.delete(trackedFlights)
-		.where(
-			and(
-				eq(trackedFlights.chatId, chatId),
-				eq(trackedFlights.flightId, flightId),
-			),
-		);
+		.where(and(eq(trackedFlights.chatId, chatId), eq(trackedFlights.flightId, flightId)));
 
 	const otherTrackers = await db.query.trackedFlights.findMany({
 		where: eq(trackedFlights.flightId, flightId),
 	});
 
 	if (otherTrackers.length === 0) {
-		await db
-			.update(flights)
-			.set({ isActive: false })
-			.where(eq(flights.id, flightId));
+		await db.update(flights).set({ isActive: false }).where(eq(flights.id, flightId));
 	}
 }
 
-export function convertAviationstackFlight(
-	apiFlight: AviationstackFlight,
-): FlightInput {
+export function convertAviationstackFlight(apiFlight: AviationstackFlight): FlightInput {
 	return {
 		flightNumber: apiFlight.flight.iata,
 		flightDate: apiFlight.flight_date,

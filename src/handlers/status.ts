@@ -39,12 +39,7 @@ bot.command("status", async (ctx: Context) => {
 			})
 			.from(trackedFlights)
 			.innerJoin(flights, eq(trackedFlights.flightId, flights.id))
-			.where(
-				and(
-					eq(trackedFlights.chatId, chatId),
-					eq(flights.flightNumber, flightNumber),
-				),
-			);
+			.where(and(eq(trackedFlights.chatId, chatId), eq(flights.flightNumber, flightNumber)));
 
 		if (userTrackings.length === 0) {
 			await ctx.reply(
@@ -60,16 +55,16 @@ bot.command("status", async (ctx: Context) => {
 
 		const lastPolled = flight.lastPolledAt ? flight.lastPolledAt * 1000 : 0;
 		const isStale = Date.now() - lastPolled > STALE_THRESHOLD;
-		const isActive =
+		const isFlightActive =
 			flight.currentStatus !== "landed" && flight.currentStatus !== "cancelled";
+		const canRefresh = await canMakeRequest();
+		const shouldRefresh = isStale && isFlightActive && canRefresh;
 
-		if (isStale && isActive && (await canMakeRequest())) {
+		if (shouldRefresh) {
 			try {
-				const apiFlight = await api.getFlightByNumber(
-					flight.flightNumber,
-					flight.flightDate,
-				);
-				if (apiFlight) {
+				const apiFlights = await api.getFlightsByNumber(flight.flightNumber, flight.flightDate);
+				if (apiFlights.length > 0) {
+					const apiFlight = apiFlights[0];
 					const oldStatus = flight.currentStatus;
 					const newStatus = apiFlight.flight_status;
 
@@ -167,8 +162,6 @@ bot.command("status", async (ctx: Context) => {
 		await ctx.reply(message, { parse_mode: "Markdown" });
 	} catch (error) {
 		logger.error("Error showing flight status:", error);
-		await ctx.reply(
-			"❌ Failed to retrieve flight status. Please try again later.",
-		);
+		await ctx.reply("❌ Failed to retrieve flight status. Please try again later.");
 	}
 });

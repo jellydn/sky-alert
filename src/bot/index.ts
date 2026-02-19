@@ -17,10 +17,7 @@ import "../handlers/natural-language.js";
 
 bot.catch((err) => {
 	const ctx = err.ctx;
-	logger.error(
-		`Error while handling update ${ctx.update.update_id}:`,
-		err.error,
-	);
+	logger.error(`Error while handling update ${ctx.update.update_id}:`, err.error);
 });
 
 export async function startBot() {
