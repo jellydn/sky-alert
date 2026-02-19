@@ -137,9 +137,11 @@
       "acceptanceCriteria": [
         "Worker runs in the same process as the bot using setInterval",
         "Worker queries all active flights that need polling",
-        "Polls every 5 minutes for flights > 3 hours from departure",
-        "Polls every 1 minute for flights within 3 hours of departure",
-        "Stops polling flights that landed > 2 hours ago or are cancelled",
+        "Starts polling 6 hours before scheduled departure",
+        "Polls every 15 minutes for flights > 3 hours from departure",
+        "Polls every 5 minutes for flights 1-3 hours from departure",
+        "Polls every 1 minute for flights within 1 hour of departure",
+        "Stops polling immediately after landing or cancellation",
         "Deduplicates: only one API call per unique flight regardless of how many users track it",
         "Updates flight record with latest status, gate, terminal, delay info",
         "Respects Aviationstack API rate limits",
@@ -147,7 +149,7 @@
       ],
       "priority": 9,
       "passes": true,
-      "notes": ""
+      "notes": "Fixed: updated to 3-tier polling (15min/5min/1min) with 6-hour start window. Uses lastPolledAt comparison instead of per-flight setInterval."
     },
     {
       "id": "US-010",
