@@ -5,6 +5,7 @@ import { db } from "../db/index.js";
 import { flights, statusChanges, trackedFlights } from "../db/schema.js";
 import { canMakeRequest } from "../services/api-budget.js";
 import { AviationstackAPI } from "../services/aviationstack.js";
+import { formatDateTime } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
 
 const api = new AviationstackAPI();
@@ -112,16 +113,8 @@ bot.command("status", async (ctx: Context) => {
 		message += `📍 ${flight.origin} → ${flight.destination}\n`;
 		message += `📅 ${flight.flightDate}\n\n`;
 
-		const scheduledDeparture = new Date(flight.scheduledDeparture);
-		const scheduledArrival = new Date(flight.scheduledArrival);
-
 		message += "*Departure:*\n";
-		message += `   Scheduled: ${scheduledDeparture.toLocaleString("en-US", {
-			month: "short",
-			day: "numeric",
-			hour: "2-digit",
-			minute: "2-digit",
-		})}\n`;
+		message += `   Scheduled: ${formatDateTime(flight.scheduledDeparture)} (${flight.origin})\n`;
 
 		if (flight.currentStatus) {
 			message += `   Status: ${flight.currentStatus}\n`;
@@ -142,12 +135,7 @@ bot.command("status", async (ctx: Context) => {
 		message += "\n";
 
 		message += "*Arrival:*\n";
-		message += `   Scheduled: ${scheduledArrival.toLocaleString("en-US", {
-			month: "short",
-			day: "numeric",
-			hour: "2-digit",
-			minute: "2-digit",
-		})}\n\n`;
+		message += `   Scheduled: ${formatDateTime(flight.scheduledArrival)} (${flight.destination})\n\n`;
 
 		if (changes.length > 0) {
 			message += "*Recent Status Changes:*\n";

@@ -3,6 +3,7 @@ import type { Context } from "grammy";
 import { bot } from "../bot/instance.js";
 import { db } from "../db/index.js";
 import { flights, trackedFlights } from "../db/schema.js";
+import { formatTime } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
 
 bot.command("flights", async (ctx: Context) => {
@@ -46,15 +47,11 @@ bot.command("flights", async (ctx: Context) => {
 
 		for (let i = 0; i < userTrackings.length; i++) {
 			const flight = userTrackings[i];
-			const departureTime = new Date(flight.scheduledDeparture);
 
 			message += `${i + 1}. *${flight.flightNumber}*\n`;
 			message += `   ${flight.origin} → ${flight.destination}\n`;
 			message += `   📅 ${flight.flightDate}\n`;
-			message += `   🛫 ${departureTime.toLocaleTimeString("en-US", {
-				hour: "2-digit",
-				minute: "2-digit",
-			})}\n`;
+			message += `   🛫 ${formatTime(flight.scheduledDeparture)} (${flight.origin})\n`;
 			if (flight.currentStatus) {
 				message += `   📊 ${flight.currentStatus}\n`;
 			}

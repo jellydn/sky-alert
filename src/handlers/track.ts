@@ -9,6 +9,7 @@ import {
 	trackFlight,
 } from "../services/flight-service.js";
 import { parseDate } from "../utils/flight-parser.js";
+import { formatTime } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
 import { setPendingSelection } from "../utils/pending-selections.js";
 
@@ -141,9 +142,6 @@ export async function saveAndConfirmFlight(
 
 	const alreadyTracking = await trackFlight(chatId, flightId);
 
-	const departureTime = new Date(apiFlight.departure.scheduled);
-	const arrivalTime = new Date(apiFlight.arrival.scheduled);
-
 	const trackingNote = alreadyTracking
 		? "ℹ️ You were already tracking this flight.\n\n"
 		: "";
@@ -154,14 +152,8 @@ export async function saveAndConfirmFlight(
 			`${apiFlight.airline.name}\n\n` +
 			`📍 Route: ${flightInput.origin} → ${flightInput.destination}\n` +
 			`📅 Date: ${flightInput.flightDate}\n\n` +
-			`🛫 Departure: ${departureTime.toLocaleTimeString("en-US", {
-				hour: "2-digit",
-				minute: "2-digit",
-			})}\n` +
-			`🛬 Arrival: ${arrivalTime.toLocaleTimeString("en-US", {
-				hour: "2-digit",
-				minute: "2-digit",
-			})}\n\n` +
+			`🛫 Departure: ${formatTime(apiFlight.departure.scheduled)} (${flightInput.origin})\n` +
+			`🛬 Arrival: ${formatTime(apiFlight.arrival.scheduled)} (${flightInput.destination})\n\n` +
 			`📊 Status: ${apiFlight.flight_status}\n` +
 			`${apiFlight.departure.gate ? `🚪 Gate: ${apiFlight.departure.gate}\n` : ""}` +
 			`${apiFlight.departure.terminal ? `🏢 Terminal: ${apiFlight.departure.terminal}\n` : ""}`,
