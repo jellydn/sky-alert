@@ -1,3 +1,9 @@
+// TODO: These tests validate helper logic (regex patterns, string formatting) but don't test
+// the actual handler since src/handlers/natural-language.ts is never imported.
+// The handler registers itself via bot.on("message:text", ...) on import, so to properly test
+// it, we would need to either: 1) Extract the handler logic into a testable function, or
+// 2) Use integration tests with the actual bot instance.
+
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Context } from "grammy";
 import type { AviationstackFlight } from "../services/aviationstack.js";
@@ -54,7 +60,7 @@ const mockApiFlight: AviationstackFlight = {
 	},
 };
 
-describe("natural-language handler", () => {
+describe("natural-language handler patterns and messages", () => {
 	beforeEach(() => {
 		mockReply.mockClear();
 
@@ -107,22 +113,22 @@ describe("natural-language handler", () => {
 		}));
 	});
 
-	describe("message filtering", () => {
-		test("should ignore command messages", () => {
+	describe("message filtering - pattern detection", () => {
+		test("should detect command messages by leading slash", () => {
 			const commandMessage = "/track UA1234";
 			const isCommand = commandMessage.startsWith("/");
 
 			expect(isCommand).toBe(true);
 		});
 
-		test("should process non-command text messages", () => {
+		test("should detect non-command text messages", () => {
 			const textMessage = "SFO to LAX today";
 			const isCommand = textMessage.startsWith("/");
 
 			expect(isCommand).toBe(false);
 		});
 
-		test("should ignore empty messages", () => {
+		test("should detect empty messages", () => {
 			const message = "";
 			const hasText = message.length > 0;
 
@@ -130,8 +136,8 @@ describe("natural-language handler", () => {
 		});
 	});
 
-	describe("route search handling", () => {
-		test("should detect route pattern", () => {
+	describe("route search patterns", () => {
+		test("should detect route pattern in messages", () => {
 			const message1 = "SFO to LAX";
 			const message2 = "JFK → LHR";
 			const message3 = "DFW-MIA";
@@ -143,7 +149,7 @@ describe("natural-language handler", () => {
 			expect(routePattern.test(message3)).toBe(true);
 		});
 
-		test("should extract origin and destination airports", () => {
+		test("should extract origin and destination airports from route pattern", () => {
 			const message = "SFO to LAX";
 			const match = message.match(/([A-Z]{3})\s*(?:to|TO|→|-)\s*([A-Z]{3})/i);
 
@@ -154,7 +160,7 @@ describe("natural-language handler", () => {
 			}
 		});
 
-		test("should default to today when no date provided", () => {
+		test("should detect absence of date keyword in message", () => {
 			const message = "SFO to LAX";
 			const hasDateKeyword = /\b(today|tomorrow|\d{4}-\d{2}-\d{2})\b/i.test(
 				message,
@@ -163,7 +169,7 @@ describe("natural-language handler", () => {
 			expect(hasDateKeyword).toBe(false);
 		});
 
-		test("should show looking up message when searching", () => {
+		test("should format looking up message correctly", () => {
 			const origin = "SFO";
 			const destination = "LAX";
 			const date = "2026-02-19";
@@ -176,14 +182,14 @@ describe("natural-language handler", () => {
 			expect(lookingUpMessage).toContain(date);
 		});
 
-		test("should limit results to 5 flights", () => {
+		test("should limit flight results array to 5 items", () => {
 			const allFlights = Array.from({ length: 10 }, () => mockApiFlight);
 			const limitedFlights = allFlights.slice(0, 5);
 
 			expect(limitedFlights.length).toBe(5);
 		});
 
-		test("should show no flights found message", () => {
+		test("should format no flights found message correctly", () => {
 			const origin = "SFO";
 			const destination = "LAX";
 			const date = "2026-02-19";
@@ -202,15 +208,15 @@ describe("natural-language handler", () => {
 			expect(noFlightsMessage).toContain(date);
 		});
 
-		test("should show error when chat cannot be identified", () => {
+		test("should detect undefined chat ID", () => {
 			const chatId = undefined;
 
 			expect(chatId).toBeUndefined();
 		});
 	});
 
-	describe("flight number parsing", () => {
-		test("should detect flight number pattern", () => {
+	describe("flight number patterns", () => {
+		test("should detect flight number pattern in messages", () => {
 			const message1 = "UA1234";
 			const message2 = "AA 567";
 			const message3 = "DAL4567";
@@ -222,7 +228,7 @@ describe("natural-language handler", () => {
 			expect(flightPattern.test(message3)).toBe(true);
 		});
 
-		test("should require both flight number and date", () => {
+		test("should validate flight number and date are defined", () => {
 			const flightNumber = "UA1234";
 			const date = "2026-02-19";
 
@@ -230,7 +236,7 @@ describe("natural-language handler", () => {
 			expect(date).toBeDefined();
 		});
 
-		test("should prompt for date when only flight number provided", () => {
+		test("should format date prompt message correctly", () => {
 			const flightNumber = "UA1234";
 			const message = `✈️ *Flight: ${flightNumber}*\n\nPlease provide the date for this flight.`;
 
@@ -239,8 +245,8 @@ describe("natural-language handler", () => {
 		});
 	});
 
-	describe("selection handling", () => {
-		test("should store pending selection when flights found", () => {
+	describe("selection handling - validation", () => {
+		test("should validate flights array and chat ID are present", () => {
 			const chatId = "123456";
 			const flights = [mockApiFlight];
 
@@ -248,7 +254,7 @@ describe("natural-language handler", () => {
 			expect(chatId).toBeDefined();
 		});
 
-		test("should validate selection number", () => {
+		test("should validate selection number range (1-5)", () => {
 			const validSelections = ["1", "2", "3", "4", "5"];
 			const invalidSelections = ["0", "6", "abc", ""];
 
@@ -266,7 +272,7 @@ describe("natural-language handler", () => {
 			expect(areInvalid.every((v) => v)).toBe(false);
 		});
 
-		test("should clear pending selection after valid choice", () => {
+		test("should select flight from array by index", () => {
 			const selectionNumber = "1";
 			const pendingFlights = [mockApiFlight];
 			const selectedIndex = Number.parseInt(selectionNumber, 10) - 1;
@@ -275,7 +281,7 @@ describe("natural-language handler", () => {
 			expect(selectedFlight).toBeDefined();
 		});
 
-		test("should show expired message for invalid selection", () => {
+		test("should format selection expired message correctly", () => {
 			const expiredMessage =
 				"❓ Selection expired or invalid.\n\n" +
 				"Please search for flights again using: `SFO to LAX today`";
@@ -285,8 +291,8 @@ describe("natural-language handler", () => {
 		});
 	});
 
-	describe("error handling", () => {
-		test("should handle rate limit errors", () => {
+	describe("error message formatting", () => {
+		test("should format rate limit message correctly", () => {
 			const rateLimitMessage =
 				"⚠️ *Rate limit exceeded*\n\nPlease try again later.";
 
@@ -294,15 +300,15 @@ describe("natural-language handler", () => {
 			expect(rateLimitMessage).toContain("try again later");
 		});
 
-		test("should handle generic API errors", () => {
+		test("should format generic API error message correctly", () => {
 			const errorMessage = "Failed to look up flights. Please try again later.";
 
 			expect(errorMessage).toContain("Failed to look up flights");
 		});
 	});
 
-	describe("help message for unrecognized input", () => {
-		test("should show help when no flight pattern detected", () => {
+	describe("help message formatting", () => {
+		test("should format help message correctly", () => {
 			const helpMessage =
 				"👋 Hi! I didn't find a flight number in your message.\n\n" +
 				"*To track a flight, use one of these formats:*\n\n" +
@@ -321,8 +327,8 @@ describe("natural-language handler", () => {
 		});
 	});
 
-	describe("multiple flight results handling", () => {
-		test("should show list when multiple flights found for number", () => {
+	describe("multiple flight results message formatting", () => {
+		test("should format list message when multiple flights found", () => {
 			const flightNumber = "UA1234";
 			const flights = [mockApiFlight, mockApiFlight];
 
@@ -333,7 +339,7 @@ describe("natural-language handler", () => {
 			expect(listMessage).toContain(flightNumber);
 		});
 
-		test("should include flight details in list", () => {
+		test("should format flight details string correctly", () => {
 			const flight = {
 				departure: {
 					iata: "SFO",

@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
+// TODO: These tests validate date calculations but don't test the actual getPollInterval() function
+// or the polling service behavior. Consider adding integration tests for the full service flow.
+
 describe("polling-service", () => {
-	describe("poll interval behavior", () => {
-		test("should use imminent interval (1 min) for flights within 1 hour of departure", () => {
+	describe("poll interval time calculations", () => {
+		test("should calculate hours until departure correctly for imminent flights (< 1 hour)", () => {
 			const now = new Date("2026-02-19T14:00:00Z");
 			const scheduledDeparture = new Date("2026-02-19T14:30:00Z");
 			const hoursUntilDeparture =
@@ -11,7 +14,7 @@ describe("polling-service", () => {
 			expect(hoursUntilDeparture).toBeLessThanOrEqual(1);
 		});
 
-		test("should use near interval (5 min) for flights 1-3 hours from departure", () => {
+		test("should calculate hours until departure correctly for near flights (1-3 hours)", () => {
 			const now = new Date("2026-02-19T12:00:00Z");
 			const scheduledDeparture = new Date("2026-02-19T14:30:00Z");
 			const hoursUntilDeparture =
@@ -21,7 +24,7 @@ describe("polling-service", () => {
 			expect(hoursUntilDeparture).toBeLessThanOrEqual(3);
 		});
 
-		test("should use far interval (15 min) for flights more than 3 hours from departure", () => {
+		test("should calculate hours until departure correctly for far flights (> 3 hours)", () => {
 			const now = new Date("2026-02-19T08:00:00Z");
 			const scheduledDeparture = new Date("2026-02-19T14:30:00Z");
 			const hoursUntilDeparture =
@@ -31,18 +34,18 @@ describe("polling-service", () => {
 		});
 	});
 
-	describe("flight filtering", () => {
-		test("should skip flights with landed status", () => {
+	describe("flight filtering - status checks", () => {
+		test("should identify landed status", () => {
 			const flight = { currentStatus: "landed" };
 			expect(flight.currentStatus).toBe("landed");
 		});
 
-		test("should skip flights with cancelled status", () => {
+		test("should identify cancelled status", () => {
 			const flight = { currentStatus: "cancelled" };
 			expect(flight.currentStatus).toBe("cancelled");
 		});
 
-		test("should skip flights more than 6 hours from departure", () => {
+		test("should calculate hours until departure correctly for distant flights (> 6 hours)", () => {
 			const now = new Date("2026-02-19T10:00:00Z");
 			const scheduledDeparture = new Date("2026-02-19T18:00:00Z");
 			const hoursUntilDeparture =
@@ -52,7 +55,7 @@ describe("polling-service", () => {
 			expect(hoursUntilDeparture).toBeGreaterThan(HOURS_BEFORE_START_POLLING);
 		});
 
-		test("should skip flights polled within their interval", () => {
+		test("should calculate time since last poll correctly", () => {
 			const POLL_INTERVAL_FAR = 15 * 60 * 1000;
 			const now = Date.now();
 			const lastPolled = now - 5 * 60 * 1000;
@@ -62,7 +65,7 @@ describe("polling-service", () => {
 		});
 	});
 
-	describe("status change detection", () => {
+	describe("status change detection - value comparisons", () => {
 		test("should detect status change", () => {
 			const oldStatus = "scheduled";
 			const newStatus = "departed";
@@ -101,8 +104,8 @@ describe("polling-service", () => {
 		});
 	});
 
-	describe("notification formatting", () => {
-		test("should format status change message correctly", () => {
+	describe("notification message formatting", () => {
+		test("should include flight number and status transition in message", () => {
 			const flightNumber = "UA1234";
 			const oldStatus = "scheduled";
 			const newStatus = "departed";
@@ -114,7 +117,7 @@ describe("polling-service", () => {
 			expect(expectedMessage).toContain(newStatus);
 		});
 
-		test("should format gate change message correctly", () => {
+		test("should include gate transition in message", () => {
 			const oldGate = "D10";
 			const newGate = "D15";
 			const expectedDetails = `Gate: ${oldGate} → ${newGate}\n`;
@@ -123,7 +126,7 @@ describe("polling-service", () => {
 			expect(expectedDetails).toContain(newGate);
 		});
 
-		test("should format delay message correctly", () => {
+		test("should include delay information in message", () => {
 			const delayMinutes = 15;
 			const expectedDetails = `Delay: ${delayMinutes} min\n`;
 
