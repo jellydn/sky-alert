@@ -12,7 +12,8 @@
 		"db:migrate": "drizzle-kit migrate",
 		"db:studio": "drizzle-kit studio",
 		"typecheck": "tsc --noEmit",
-		"lint": "biome check ."
+		"lint": "biome check .",
+		"test": "bun test"
 	},
 	"keywords": [
 		"telegram",
