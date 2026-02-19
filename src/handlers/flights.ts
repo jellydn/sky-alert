@@ -61,7 +61,7 @@ bot.command("flights", async (ctx: Context) => {
 			message += "\n";
 		}
 
-		message += "Use /status <flight_number> for detailed information";
+		message += "Use `/status` followed by a flight number for details";
 
 		await ctx.reply(message, { parse_mode: "Markdown" });
 	} catch (error) {
