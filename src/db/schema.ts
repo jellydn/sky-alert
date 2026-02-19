@@ -35,6 +35,13 @@ export const trackedFlights = sqliteTable("tracked_flights", {
 		.default(sql`(unixepoch())`),
 });
 
+export const apiUsage = sqliteTable("api_usage", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	month: text("month").notNull().unique(),
+	requestCount: integer("request_count").notNull().default(0),
+	lastRequestAt: integer("last_request_at", { mode: "timestamp" }),
+});
+
 export const statusChanges = sqliteTable("status_changes", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	flightId: integer("flight_id")
