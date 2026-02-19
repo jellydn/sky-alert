@@ -3,6 +3,7 @@ import "../handlers/track.js";
 import "../handlers/natural-language.js";
 import "../handlers/flights.js";
 import "../handlers/status.js";
+import "../handlers/remove.js";
 
 const botToken = process.env.BOT_TOKEN;
 

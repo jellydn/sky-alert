@@ -110,3 +110,17 @@ Started: Thu Feb 19 11:09:23 +08 2026
 - Limit results to avoid overwhelming users with too much history
 - Format dates with month/day/time for compact display
 ---
+
+## Thu Feb 19 11:33:02 +08 2026 - US-008
+- Created /remove command handler to stop tracking a flight
+- /remove AA123 command deletes the tracked_flights entry for this chat_id and flight
+- Bot confirms removal with flight details (number, route, date)
+- If no other users track this flight, it marks it as inactive (is_active = false)
+- If flight not found in user's tracked list, bot shows error message suggesting /flights
+- Typecheck passes
+- Files changed: src/handlers/remove.ts, src/bot/index.ts
+**Learnings for future iterations:**
+- Check for other trackers before marking flight inactive using query().findMany()
+- Use delete() with where clause to remove tracking entries
+- Always confirm user actions with details of what was removed
+---
