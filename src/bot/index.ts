@@ -2,6 +2,7 @@ import { Bot, GrammyError } from "grammy";
 import "../handlers/track.js";
 import "../handlers/natural-language.js";
 import "../handlers/flights.js";
+import "../handlers/status.js";
 
 const botToken = process.env.BOT_TOKEN;
 
