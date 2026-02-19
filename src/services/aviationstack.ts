@@ -139,25 +139,10 @@ export class AviationstackAPI {
 		url.searchParams.append("access_key", this.apiKey);
 		url.searchParams.append("flight_iata", flightNumber);
 
-		try {
-			const data = await this.fetchWithBudget(url);
-			const matching = data.data.filter((f) => f.flight_date === date);
-			this.setCache(cacheKey, matching);
-			return matching;
-		} catch (error) {
-			if (error instanceof Error) {
-				throw error;
-			}
-			throw new Error("Failed to fetch flight data");
-		}
-	}
-
-	async getFlightByNumber(
-		flightNumber: string,
-		date: string,
-	): Promise<AviationstackFlight | null> {
-		const flights = await this.getFlightsByNumber(flightNumber, date);
-		return flights.length === 0 ? null : flights[0];
+		const data = await this.fetchWithBudget(url);
+		const matching = data.data.filter((f) => f.flight_date === date);
+		this.setCache(cacheKey, matching);
+		return matching;
 	}
 
 	async getFlightsByRoute(
@@ -174,16 +159,9 @@ export class AviationstackAPI {
 		url.searchParams.append("dep_iata", origin);
 		url.searchParams.append("arr_iata", destination);
 
-		try {
-			const data = await this.fetchWithBudget(url);
-			const matching = data.data.filter((f) => f.flight_date === date);
-			this.setCache(cacheKey, matching);
-			return matching;
-		} catch (error) {
-			if (error instanceof Error) {
-				throw error;
-			}
-			throw new Error("Failed to fetch flight data");
-		}
+		const data = await this.fetchWithBudget(url);
+		const matching = data.data.filter((f) => f.flight_date === date);
+		this.setCache(cacheKey, matching);
+		return matching;
 	}
 }
