@@ -47,10 +47,11 @@ export async function canMakeRequest(): Promise<boolean> {
 
 export async function recordRequest(): Promise<void> {
 	const month = getCurrentMonth();
+	const record = await getOrCreateMonthRecord();
 	await db
 		.update(apiUsage)
 		.set({
-			requestCount: (await getOrCreateMonthRecord()).requestCount + 1,
+			requestCount: record.requestCount + 1,
 			lastRequestAt: new Date(),
 		})
 		.where(eq(apiUsage.month, month));
