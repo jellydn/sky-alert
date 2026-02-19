@@ -45,3 +45,22 @@ Started: Thu Feb 19 11:09:23 +08 2026
 - Bot export must be imported from bot/index.js, not root index.js
 - Handlers should be imported to register their commands with the bot instance
 ---
+
+## Thu Feb 19 11:22:14 +08 2026 - US-004
+- Created flight input parser with regex patterns for flight numbers
+- Implemented date parsing for multiple formats (ISO, slash, month names, relative dates)
+- Added support for route detection (airport code + "to" + airport code)
+- Created natural language handler that processes text messages
+- Bot extracts flight number from free-text messages using pattern matching
+- Bot understands relative dates: 'today', 'tomorrow', 'next Monday'
+- Bot understands date formats: '2026-03-15', 'March 15', '15/03/2026'
+- If flight number found but no date, bot asks for the date
+- If no flight number found, bot shows helpful message with examples
+- Extracted data follows the same track flow as US-003
+- Typecheck passes
+- Files changed: src/utils/flight-parser.ts, src/handlers/natural-language.ts, src/bot/index.ts
+**Learnings for future iterations:**
+- Use bot.on('message:text') to catch all text messages, bot.on('message') catches all message types
+- Import handlers to register them - they run on module import, not on explicit call
+- Remove generic message handlers when implementing specific ones
+---

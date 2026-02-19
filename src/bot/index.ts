@@ -1,5 +1,6 @@
 import { Bot, GrammyError } from "grammy";
 import "../handlers/track.js";
+import "../handlers/natural-language.js";
 
 const botToken = process.env.BOT_TOKEN;
 
@@ -43,10 +44,6 @@ bot.command("help", async (ctx) => {
 			'• "SFO to LAX today"',
 		{ parse_mode: "Markdown" },
 	);
-});
-
-bot.on("message", async (ctx) => {
-	await ctx.reply("Hi! Use /help to see available commands.");
 });
 
 export async function startBot() {
