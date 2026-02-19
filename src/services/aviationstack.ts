@@ -68,6 +68,7 @@ export interface AviationstackResponse {
 
 const API_BASE_URL = "https://api.aviationstack.com/v1";
 const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+const MAX_CACHE_ENTRIES = 500;
 
 interface CacheEntry<T> {
 	data: T;
@@ -96,6 +97,12 @@ export class AviationstackAPI {
 	}
 
 	private setCache<T>(key: string, data: T): void {
+		if (this.cache.size >= MAX_CACHE_ENTRIES) {
+			const oldestKey = this.cache.keys().next().value;
+			if (oldestKey) {
+				this.cache.delete(oldestKey);
+			}
+		}
 		this.cache.set(key, { data, timestamp: Date.now() });
 	}
 
@@ -162,3 +169,5 @@ export class AviationstackAPI {
 		return matching;
 	}
 }
+
+export const aviationstackApi = new AviationstackAPI();
