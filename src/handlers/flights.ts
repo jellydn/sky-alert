@@ -1,6 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import type { Context } from "grammy";
-import { bot } from "../bot/index.js";
+import { bot } from "../bot/instance.js";
 import { db } from "../db/index.js";
 import { flights, trackedFlights } from "../db/schema.js";
 

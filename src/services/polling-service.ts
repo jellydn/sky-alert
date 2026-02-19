@@ -1,87 +1,70 @@
-import { and, eq, gt, lt, or } from "drizzle-orm";
-import { bot } from "../bot/index.js";
+import { eq } from "drizzle-orm";
+import { bot } from "../bot/instance.js";
 import { db } from "../db/index.js";
 import { flights, statusChanges, trackedFlights } from "../db/schema.js";
+import { isPollingEnabled } from "./api-budget.js";
 import { AviationstackAPI } from "./aviationstack.js";
 
 const api = new AviationstackAPI();
 
-const POLL_INTERVAL_LONG = 5 * 60 * 1000; // 5 minutes
-const POLL_INTERVAL_SHORT = 1 * 60 * 1000; // 1 minute
-const HOURS_BEFORE_DEPARTURE_FOR_SHORT_POLL = 3;
-const HOURS_AFTER_ARRIVAL_TO_STOP_POLLING = 2;
-
-const pollIntervals = new Map<number, NodeJS.Timeout>();
+const POLL_INTERVAL_FAR = 15 * 60 * 1000; // 15 minutes (> 3 hours from departure)
+const POLL_INTERVAL_NEAR = 5 * 60 * 1000; // 5 minutes (1-3 hours from departure)
+const POLL_INTERVAL_IMMINENT = 1 * 60 * 1000; // 1 minute (< 1 hour from departure)
+const HOURS_BEFORE_START_POLLING = 6;
+const WORKER_CHECK_INTERVAL = 1 * 60 * 1000; // check every minute
 
 export function startPollingWorker() {
-	console.log("✓ Starting polling worker");
+	console.log("✓ Starting polling worker (budget-aware)");
 
 	setInterval(async () => {
-		await pollFlights();
-	}, POLL_INTERVAL_LONG);
+		if (await isPollingEnabled()) {
+			await pollFlights();
+		}
+	}, WORKER_CHECK_INTERVAL);
+}
+
+function getPollInterval(scheduledDeparture: Date, now: Date): number {
+	const hoursUntilDeparture =
+		(scheduledDeparture.getTime() - now.getTime()) / (60 * 60 * 1000);
+
+	if (hoursUntilDeparture <= 1) return POLL_INTERVAL_IMMINENT;
+	if (hoursUntilDeparture <= 3) return POLL_INTERVAL_NEAR;
+	return POLL_INTERVAL_FAR;
 }
 
 async function pollFlights() {
 	try {
 		const now = new Date();
-		const threeHoursAgo = new Date(
-			now.getTime() - HOURS_BEFORE_DEPARTURE_FOR_SHORT_POLL * 60 * 60 * 1000,
-		);
-		const threeHoursFromNow = new Date(
-			now.getTime() + HOURS_BEFORE_DEPARTURE_FOR_SHORT_POLL * 60 * 60 * 1000,
-		);
-		const twoHoursAgo = new Date(
-			now.getTime() - HOURS_AFTER_ARRIVAL_TO_STOP_POLLING * 60 * 60 * 1000,
+		const sixHoursFromNow = new Date(
+			now.getTime() + HOURS_BEFORE_START_POLLING * 60 * 60 * 1000,
 		);
 
 		const activeFlights = await db
 			.select()
 			.from(flights)
-			.where(
-				and(
-					eq(flights.isActive, true),
-					or(
-						gt(flights.scheduledDeparture, twoHoursAgo.toISOString()),
-						eq(flights.currentStatus, "cancelled"),
-					),
-				),
-			);
+			.where(eq(flights.isActive, true));
 
 		for (const flight of activeFlights) {
 			const scheduledDeparture = new Date(flight.scheduledDeparture);
 
-			const shouldStopPolling =
-				flight.currentStatus === "landed" && scheduledDeparture < twoHoursAgo;
-
-			if (shouldStopPolling) {
-				await db
-					.update(flights)
-					.set({ isActive: false })
-					.where(eq(flights.id, flight.id));
-
-				const existingInterval = pollIntervals.get(flight.id);
-				if (existingInterval) {
-					clearInterval(existingInterval);
-					pollIntervals.delete(flight.id);
-				}
+			if (
+				flight.currentStatus === "landed" ||
+				flight.currentStatus === "cancelled"
+			) {
 				continue;
 			}
 
-			const isNearDeparture = scheduledDeparture < threeHoursFromNow;
-			const pollInterval = isNearDeparture
-				? POLL_INTERVAL_SHORT
-				: POLL_INTERVAL_LONG;
-
-			const existingInterval = pollIntervals.get(flight.id);
-			if (existingInterval) {
+			if (scheduledDeparture > sixHoursFromNow) {
 				continue;
 			}
 
-			const intervalId = setInterval(async () => {
-				await pollFlight(flight.id, flight.flightNumber, flight.flightDate);
-			}, pollInterval);
+			const pollInterval = getPollInterval(scheduledDeparture, now);
+			const lastPolled = flight.lastPolledAt ? flight.lastPolledAt * 1000 : 0;
+			const timeSinceLastPoll = now.getTime() - lastPolled;
 
-			pollIntervals.set(flight.id, intervalId);
+			if (timeSinceLastPoll < pollInterval) {
+				continue;
+			}
 
 			await pollFlight(flight.id, flight.flightNumber, flight.flightDate);
 		}

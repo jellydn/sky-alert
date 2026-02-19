@@ -1,8 +1,13 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { Context } from "grammy";
-import { bot } from "../bot/index.js";
+import { bot } from "../bot/instance.js";
 import { db } from "../db/index.js";
 import { flights, statusChanges, trackedFlights } from "../db/schema.js";
+import { canMakeRequest } from "../services/api-budget.js";
+import { AviationstackAPI } from "../services/aviationstack.js";
+
+const api = new AviationstackAPI();
+const STALE_THRESHOLD = 15 * 60 * 1000; // 15 minutes
 
 bot.command("status", async (ctx: Context) => {
 	const args = ctx.match?.toString().trim();
@@ -49,7 +54,52 @@ bot.command("status", async (ctx: Context) => {
 			return;
 		}
 
-		const flight = userTrackings[0].flight;
+		let flight = userTrackings[0].flight;
+
+		const lastPolled = flight.lastPolledAt ? flight.lastPolledAt * 1000 : 0;
+		const isStale = Date.now() - lastPolled > STALE_THRESHOLD;
+		const isActive =
+			flight.currentStatus !== "landed" &&
+			flight.currentStatus !== "cancelled";
+
+		if (isStale && isActive && (await canMakeRequest())) {
+			try {
+				const apiFlight = await api.getFlightByNumber(
+					flight.flightNumber,
+					flight.flightDate,
+				);
+				if (apiFlight) {
+					const oldStatus = flight.currentStatus;
+					const newStatus = apiFlight.flight_status;
+
+					if (oldStatus !== newStatus) {
+						await db.insert(statusChanges).values({
+							flightId: flight.id,
+							oldStatus,
+							newStatus,
+						});
+					}
+
+					await db
+						.update(flights)
+						.set({
+							currentStatus: apiFlight.flight_status,
+							gate: apiFlight.departure.gate || undefined,
+							terminal: apiFlight.departure.terminal || undefined,
+							delayMinutes: apiFlight.departure.delay || undefined,
+							lastPolledAt: Math.floor(Date.now() / 1000),
+						})
+						.where(eq(flights.id, flight.id));
+
+					const updated = await db.query.flights.findFirst({
+						where: eq(flights.id, flight.id),
+					});
+					if (updated) flight = updated;
+				}
+			} catch {
+				// Silently fall back to cached data
+			}
+		}
 
 		const changes = await db
 			.select()
@@ -119,6 +169,11 @@ bot.command("status", async (ctx: Context) => {
 				}
 				message += "\n";
 			}
+		}
+
+		if (flight.lastPolledAt) {
+			const ago = Math.round((Date.now() - flight.lastPolledAt * 1000) / 60000);
+			message += `\n_Updated ${ago} min ago_`;
 		}
 
 		await ctx.reply(message, { parse_mode: "Markdown" });

@@ -1,17 +1,13 @@
-import { Bot, GrammyError } from "grammy";
+import { GrammyError } from "grammy";
+import { bot } from "./instance.js";
+
+export { bot } from "./instance.js";
 import "../handlers/track.js";
 import "../handlers/natural-language.js";
 import "../handlers/flights.js";
 import "../handlers/status.js";
 import "../handlers/remove.js";
-
-const botToken = process.env.BOT_TOKEN;
-
-if (!botToken) {
-	throw new Error("BOT_TOKEN environment variable is required");
-}
-
-export const bot = new Bot(botToken);
+import "../handlers/usage.js";
 
 bot.command("start", async (ctx) => {
 	await ctx.reply(
@@ -37,7 +33,8 @@ bot.command("help", async (ctx) => {
 			"/track <flight> <date> - Track a flight\n" +
 			"/flights - List all tracked flights\n" +
 			"/status <flight> - View flight status\n" +
-			"/remove <flight> - Stop tracking a flight\n\n" +
+			"/remove <flight> - Stop tracking a flight\n" +
+			"/usage - Show API usage this month\n\n" +
 			"*Examples:*\n" +
 			"• `/track AA123 2026-03-15`\n" +
 			"• `/status UA456`\n" +

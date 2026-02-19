@@ -1,5 +1,5 @@
 import type { Context } from "grammy";
-import { bot } from "../bot/index.js";
+import { bot } from "../bot/instance.js";
 import { AviationstackAPI } from "../services/aviationstack.js";
 import {
 	convertAviationstackFlight,

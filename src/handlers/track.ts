@@ -1,5 +1,5 @@
 import type { Context } from "grammy";
-import { bot } from "../bot/index.js";
+import { bot } from "../bot/instance.js";
 import { AviationstackAPI } from "../services/aviationstack.js";
 import {
 	convertAviationstackFlight,
@@ -100,11 +100,19 @@ bot.command("track", async (ctx: Context) => {
 		);
 	} catch (error) {
 		if (error instanceof Error) {
+			if (error.message === "Monthly API budget exceeded") {
+				await ctx.reply(
+					"⚠️ *Monthly API budget exceeded*\n\n" +
+						"Free tier limit (100 requests/month) reached.\n" +
+						"Use `/usage` to check your remaining budget.",
+					{ parse_mode: "Markdown" },
+				);
+				return;
+			}
+
 			if (error.message === "Rate limit exceeded") {
 				await ctx.reply(
-					"⚠️ *Rate limit exceeded*\n\n" +
-						"Please try again later.\n" +
-						"Aviationstack API has limits on the free tier.",
+					"⚠️ *Rate limit exceeded*\n\nPlease try again later.",
 					{ parse_mode: "Markdown" },
 				);
 				return;
