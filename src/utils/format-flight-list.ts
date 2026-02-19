@@ -1,4 +1,5 @@
 import type { AviationstackFlight } from "../services/aviationstack.js";
+import { formatTime } from "./format-time.js";
 
 export function formatFlightListMessage(
 	flights: AviationstackFlight[],
@@ -13,11 +14,7 @@ export function formatFlightListMessage(
 
 	for (let i = 0; i < limited.length; i++) {
 		const f = limited[i];
-		const depTime = new Date(f.departure.scheduled);
-		const timeStr = depTime.toLocaleTimeString("en-US", {
-			hour: "2-digit",
-			minute: "2-digit",
-		});
+		const timeStr = formatTime(f.departure.scheduled);
 
 		if (flightNumber) {
 			message += `${i + 1}. ${f.departure.iata} → ${f.arrival.iata}\n`;
