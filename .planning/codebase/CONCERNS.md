@@ -16,6 +16,7 @@
 - Startup DB failure fixed by ensuring `./data` directory exists before SQLite open.
 - `just` DB commands now use local drizzle-kit binary; migrate works reliably.
 - Fallback precedence stabilized: FlightStats is now preferred for low-signal live refresh, with FlightAware only as secondary fallback.
+- Aviationstack in-memory cache eviction now behaves as LRU by access (read refresh + oldest-key eviction).
 
 ### Partial
 - API usage race risk reduced with `onConflictDoNothing` in month record creation, but usage accounting is still eventually consistent under high concurrency.
@@ -74,10 +75,9 @@
 - Risk: Poll backlog at higher tracked-flight volume
 - Next fix: Add bounded concurrency queue
 
-**In-Memory Cache Policy Simplicity (Partial)**
+**In-Memory Cache Policy Simplicity (Resolved)**
 - Files: `src/services/aviationstack.ts`
-- Status: Now bounded by max entries, but eviction is FIFO by insertion order (not true LRU)
-- Next fix: Implement LRU or TTL+size strategy with explicit metrics
+- Resolution: Cache now refreshes insertion order on reads and evicts oldest entry, providing LRU-by-access behavior.
 
 **Fallback Source Consistency (Resolved)**
 - Files: `src/handlers/status.ts`, `src/services/polling-service.ts`
@@ -119,6 +119,19 @@
 - `src/services/polling-service.ts` scheduling/interval behavior
 - `src/services/cleanup-service.ts` batch cleanup correctness
 - `src/handlers/status.ts` refresh-failure path and stale-data messaging
+
+## Issue Tracking
+
+- Pending selection persistence: #10 https://github.com/jellydn/sky-alert/issues/10
+- Per-chat command rate limiting: #11 https://github.com/jellydn/sky-alert/issues/11
+- Natural-language handler order fragility: #12 https://github.com/jellydn/sky-alert/issues/12
+- API budget concurrency race: #13 https://github.com/jellydn/sky-alert/issues/13
+- Health/readiness endpoint: #14 https://github.com/jellydn/sky-alert/issues/14
+- External error reporting: #15 https://github.com/jellydn/sky-alert/issues/15
+- Backup/restore strategy: #16 https://github.com/jellydn/sky-alert/issues/16
+- Behavior-focused integration tests: #17 https://github.com/jellydn/sky-alert/issues/17
+- Polling bounded concurrency: #18 https://github.com/jellydn/sky-alert/issues/18
+- Aviationstack log sanitization hardening: #19 https://github.com/jellydn/sky-alert/issues/19
 
 ---
 
