@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.github/
+.gitignore
+
+# Documentation and planning
+*.md
+!README.md
+.planning/
+
+# CI/CD
+.claude/
+
+# Test files
+*.test.ts
+
+# Drizzle meta
+drizzle/meta/
