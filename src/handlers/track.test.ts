@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Context } from "grammy";
 import type { AviationstackFlight } from "../services/aviationstack.js";
 
-// Mock the bot
 const mockReply = mock(() => Promise.resolve({ message_id: 1 }));
 
 const mockContext = {
@@ -12,7 +11,6 @@ const mockContext = {
 	reply: mockReply,
 } as unknown as Context;
 
-// Mock the database responses
 const mockApiFlight: AviationstackFlight = {
 	flight_date: "2026-02-19",
 	flight_status: "scheduled",
@@ -59,21 +57,18 @@ describe("track handler", () => {
 	beforeEach(() => {
 		mockReply.mockClear();
 
-		// Mock bot instance
 		mock.module("../bot/instance.js", () => ({
 			bot: {
 				command: mock(() => ({})),
 			},
 		}));
 
-		// mock AviationstackAPI
 		mock.module("../services/aviationstack.js", () => ({
 			AviationstackAPI: mock(() => ({
 				getFlightsByNumber: mock(() => Promise.resolve([mockApiFlight])),
 			})),
 		}));
 
-		// Mock database and services
 		mock.module("../db/index.js", () => ({
 			db: {
 				query: {
@@ -114,31 +109,24 @@ describe("track handler", () => {
 
 	describe("/track command validation", () => {
 		test("should show error when missing arguments", async () => {
-			// Arrange
 			const _context = {
 				...mockContext,
 				match: "",
 			} as Context;
 
-			// Act
-			const _module = await import("./track.js");
-			// Note: The handler registers with bot.command, so we test the expected behavior
-			// In a real scenario, we'd trigger the handler through the bot
+			await import("./track.js");
 
-			// Assert - verify the error message format
 			const expectedErrorMessage =
 				"❌ *Invalid format*\n\nUsage: `/track <flight_number> <date>`";
 			expect(expectedErrorMessage).toContain("Invalid format");
 		});
 
 		test("should show error when only flight number provided", async () => {
-			// Arrange
 			const context = {
 				...mockContext,
 				match: "UA1234",
 			} as Context;
 
-			// Assert
 			const hasDate = context.match?.toString().includes(" ");
 			expect(hasDate).toBe(false);
 		});
@@ -146,29 +134,23 @@ describe("track handler", () => {
 
 	describe("flight lookup behavior", () => {
 		test("should reply with 'looking up' message when searching", () => {
-			// Arrange & Act
 			const lookingUpMessage = "🔍 Looking up flight...";
 
-			// Assert
 			expect(lookingUpMessage).toContain("Looking up");
 		});
 
 		test("should show error when flight not found", () => {
-			// Arrange
 			const flightNumber = "UA9999";
 			const date = "2026-02-19";
 
-			// Act
 			const errorMessage = `❌ *Flight not found*\n\nCould not find flight ${flightNumber} on ${date}.`;
 
-			// Assert
 			expect(errorMessage).toContain("Flight not found");
 			expect(errorMessage).toContain(flightNumber);
 			expect(errorMessage).toContain(date);
 		});
 
 		test("should show selection list when multiple flights found", () => {
-			// Arrange
 			const flightNumber = "UA1234";
 			const flights = [
 				{
@@ -187,10 +169,8 @@ describe("track handler", () => {
 				},
 			];
 
-			// Act
 			const message = `✈️ *Found ${flights.length} flights for ${flightNumber}*`;
 
-			// Assert
 			expect(message).toContain("Found");
 			expect(message).toContain(flights.length.toString());
 			expect(message).toContain(flightNumber);
@@ -199,39 +179,31 @@ describe("track handler", () => {
 
 	describe("error handling", () => {
 		test("should handle monthly API budget exceeded error", () => {
-			// Arrange
 			const errorMessage =
 				"⚠️ *Monthly API budget exceeded*\n\nFree tier limit (100 requests/month) reached.";
 
-			// Act & Assert
 			expect(errorMessage).toContain("budget exceeded");
 			expect(errorMessage).toContain("100 requests/month");
 		});
 
 		test("should handle rate limit error", () => {
-			// Arrange
 			const errorMessage = "⚠️ *Rate limit exceeded*\n\nPlease try again later.";
 
-			// Act & Assert
 			expect(errorMessage).toContain("Rate limit");
 			expect(errorMessage).toContain("try again later");
 		});
 
 		test("should handle invalid API key error", () => {
-			// Arrange
 			const errorMessage =
 				"❌ *Configuration error*\n\nInvalid Aviationstack API key.";
 
-			// Act & Assert
 			expect(errorMessage).toContain("Configuration error");
 			expect(errorMessage).toContain("Invalid Aviationstack API key");
 		});
 
 		test("should handle generic errors gracefully", () => {
-			// Arrange
 			const errorMessage = "❌ Failed to track flight. Please try again later.";
 
-			// Act & Assert
 			expect(errorMessage).toContain("Failed to track flight");
 			expect(errorMessage).toContain("try again later");
 		});
@@ -239,7 +211,6 @@ describe("track handler", () => {
 
 	describe("saveAndConfirmFlight function", () => {
 		test("should use existing flight when already in database", async () => {
-			// Arrange
 			const existingFlight = {
 				id: 1,
 				flightNumber: "UA1234",
@@ -247,41 +218,32 @@ describe("track handler", () => {
 			};
 			const newFlight = null;
 
-			// Act & Assert
 			const hasExisting = existingFlight !== null;
 			const hasNew = newFlight !== null;
 
 			expect(hasExisting).toBe(true);
 			expect(hasNew).toBe(false);
-			// Behavior: should use existing flight ID
 		});
 
 		test("should create new flight when not in database", async () => {
-			// Arrange
 			const existingFlight = null;
-			const _newFlight = { id: 1 };
 
-			// Act & Assert
 			const hasExisting = existingFlight !== null;
 			const shouldCreate = !hasExisting;
 
 			expect(shouldCreate).toBe(true);
-			// Behavior: should insert new flight record
 		});
 
 		test("should show tracking note when already tracking", () => {
-			// Arrange
 			const alreadyTracking = true;
 			const trackingNote = alreadyTracking
 				? "ℹ️ You were already tracking this flight.\n\n"
 				: "";
 
-			// Act & Assert
 			expect(trackingNote).toContain("already tracking");
 		});
 
 		test("should show success message with flight details", () => {
-			// Arrange
 			const flightDetails = {
 				flightNumber: "UA1234",
 				airline: "United Airlines",
@@ -293,7 +255,6 @@ describe("track handler", () => {
 				status: "scheduled",
 			};
 
-			// Act
 			const successMessage =
 				`✅ *Flight Tracked Successfully*\n\n` +
 				`✈️ ${flightDetails.flightNumber}\n` +
@@ -301,7 +262,6 @@ describe("track handler", () => {
 				`📍 Route: ${flightDetails.origin} → ${flightDetails.destination}\n` +
 				`📅 Date: ${flightDetails.flightDate}`;
 
-			// Assert
 			expect(successMessage).toContain("Flight Tracked Successfully");
 			expect(successMessage).toContain(flightDetails.flightNumber);
 			expect(successMessage).toContain(flightDetails.airline);
@@ -312,21 +272,16 @@ describe("track handler", () => {
 
 	describe("pending selection behavior", () => {
 		test("should set pending selection when multiple flights found", () => {
-			// Arrange
 			const chatId = "123456";
 			const flights = [mockApiFlight];
 
-			// Act & Assert
 			expect(flights.length).toBeGreaterThan(0);
 			expect(chatId).toBeDefined();
-			// Behavior: setPendingSelection should be called with flights array
 		});
 
 		test("should prompt user to select flight", () => {
-			// Arrange
 			const promptMessage = "Reply with the number (1-5) to track a flight.";
 
-			// Act & Assert
 			expect(promptMessage).toContain("Reply with the number");
 			expect(promptMessage).toContain("1-5");
 		});

@@ -131,16 +131,4 @@ describe("polling-service", () => {
 			expect(expectedDetails).toContain("Delay");
 		});
 	});
-
-	describe("startPollingWorker", () => {
-		test("should initialize worker with correct check interval", () => {
-			const WORKER_CHECK_INTERVAL = 1 * 60 * 1000;
-			expect(WORKER_CHECK_INTERVAL).toBe(60000);
-		});
-
-		test("should respect polling budget status", () => {
-			const isPollingEnabled = true;
-			expect(isPollingEnabled).toBe(true);
-		});
-	});
 });
