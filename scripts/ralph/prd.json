@@ -1,0 +1,185 @@
+{
+  "project": "SkyAlert",
+  "branchName": "ralph/sky-alert-telegram-bot",
+  "description": "Real-time flight monitoring Telegram bot that tracks flight status changes and sends proactive alerts",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Project setup and database schema",
+      "description": "As a developer, I need the project scaffolded with TypeScript, Telegram bot library, and database schema so that other features can build on top.",
+      "acceptanceCriteria": [
+        "Initialize TypeScript project with grammy (Telegram bot framework) and SQLite (better-sqlite3 or drizzle)",
+        "Create flights table: id, flight_number, flight_date, origin, destination, scheduled_departure, scheduled_arrival, current_status, gate, terminal, delay_minutes, last_polled_at, is_active, created_at, updated_at",
+        "Create tracked_flights table: id, chat_id (Telegram), flight_id (FK), created_at",
+        "Create status_changes table: id, flight_id (FK), old_status, new_status, details, detected_at",
+        "Database migrations run successfully",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Telegram bot setup with /help and /start commands",
+      "description": "As a traveler, I want to start the bot and see available commands so that I know how to use it.",
+      "acceptanceCriteria": [
+        "Bot connects to Telegram using BOT_TOKEN env variable",
+        "Bot responds to /start with a welcome message explaining what SkyAlert does",
+        "Bot responds to /help with a list of available commands: /track, /flights, /status, /remove",
+        "Bot uses long polling for receiving updates",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Track flight by flight number and date",
+      "description": "As a traveler, I want to send a flight number and date to the bot so that it starts tracking my flight.",
+      "acceptanceCriteria": [
+        "/track AA123 2026-03-15 parses flight number and date from the message",
+        "Bot calls Aviationstack API to validate flight exists (using AVIATIONSTACK_API_KEY env variable)",
+        "If valid, bot saves flight to flights table and links to chat_id in tracked_flights table",
+        "Bot replies with confirmation: flight number, route (origin → destination), scheduled departure/arrival",
+        "If flight not found, bot replies with clear error message",
+        "If API rate limit hit, bot replies asking user to try again later",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Natural language flight input parsing",
+      "description": "As a traveler, I want to send flexible messages like 'Track my flight AA123 tomorrow' so that I don't need to remember exact command format.",
+      "acceptanceCriteria": [
+        "Bot extracts flight number (pattern: 1-3 letters + 1-4 digits) from free-text messages",
+        "Bot understands relative dates: 'today', 'tomorrow', 'next Monday'",
+        "Bot understands date formats: '2026-03-15', 'March 15', '15/03/2026'",
+        "If flight number found but no date, bot asks for the date",
+        "If no flight number found, bot shows help message",
+        "Extracted data follows the same track flow as US-003",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Route-based flight lookup",
+      "description": "As a traveler, I want to find flights by route (e.g., 'SFO to LAX today') so that I can track a flight without knowing its number.",
+      "acceptanceCriteria": [
+        "Bot detects route pattern: 3-letter airport code + 'to' + 3-letter airport code + optional date",
+        "Bot queries Aviationstack API for flights matching the route and date",
+        "Bot presents up to 5 matching flights with flight number, airline, departure time",
+        "User replies with a number to select which flight to track",
+        "Selected flight is saved and tracked using the same flow as US-003",
+        "If no flights found, bot shows clear message",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "List tracked flights",
+      "description": "As a traveler, I want to see all my currently tracked flights so that I know what's being monitored.",
+      "acceptanceCriteria": [
+        "/flights command queries tracked_flights table by chat_id",
+        "Each entry shows: flight number, route (origin → destination), date, current status",
+        "Flights are sorted by departure date (soonest first)",
+        "If no flights tracked, bot shows helpful message suggesting /track",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "View current flight status",
+      "description": "As a traveler, I want to check the current status of a tracked flight on demand.",
+      "acceptanceCriteria": [
+        "/status AA123 command returns detailed flight info",
+        "Shows: current status, scheduled and actual departure/arrival times, gate, terminal, delay duration",
+        "Shows timeline of status changes from status_changes table (newest first)",
+        "If flight not tracked, bot shows error message",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Remove flight from tracking",
+      "description": "As a traveler, I want to stop tracking a flight I no longer need.",
+      "acceptanceCriteria": [
+        "/remove AA123 command deletes the tracked_flights entry for this chat_id and flight",
+        "Bot confirms removal with flight details",
+        "If no other users track this flight, mark it as inactive (is_active = false)",
+        "If flight not found in user's tracked list, bot shows error message",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Background polling worker",
+      "description": "As a system, I need to poll the flight data API at regular intervals to detect status changes.",
+      "acceptanceCriteria": [
+        "Worker runs in the same process as the bot using setInterval",
+        "Worker queries all active flights that need polling",
+        "Polls every 5 minutes for flights > 3 hours from departure",
+        "Polls every 1 minute for flights within 3 hours of departure",
+        "Stops polling flights that landed > 2 hours ago or are cancelled",
+        "Deduplicates: only one API call per unique flight regardless of how many users track it",
+        "Updates flight record with latest status, gate, terminal, delay info",
+        "Respects Aviationstack API rate limits",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Status change detection and alerts",
+      "description": "As a traveler, I want to be notified when my flight's status changes so that I can take action immediately.",
+      "acceptanceCriteria": [
+        "When polling detects a status change, insert record into status_changes table",
+        "Send Telegram message to ALL chat_ids tracking that flight",
+        "Message includes: flight number, old status → new status, relevant details (delay duration, new gate, etc.)",
+        "Alerts sent for: check-in open, delay, gate change, boarding, final call, departed, landed, cancelled",
+        "Gate or terminal changes (even without status change) also trigger alerts",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Auto-cleanup of expired flights",
+      "description": "As a system, I need to clean up old flight data to keep the database lean.",
+      "acceptanceCriteria": [
+        "Cleanup runs periodically (e.g., every hour via setInterval)",
+        "Flights landed or cancelled > 24 hours ago are marked is_active = false",
+        "Inactive flights are excluded from polling",
+        "User can still view status of inactive flights for 7 days via /status",
+        "Flights older than 7 days are deleted from the database entirely",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

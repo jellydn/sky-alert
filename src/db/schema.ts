@@ -1,0 +1,49 @@
+import { sql } from "drizzle-orm";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+export const flights = sqliteTable("flights", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	flightNumber: text("flight_number").notNull(),
+	flightDate: text("flight_date").notNull(),
+	origin: text("origin").notNull(),
+	destination: text("destination").notNull(),
+	scheduledDeparture: text("scheduled_departure").notNull(),
+	scheduledArrival: text("scheduled_arrival").notNull(),
+	currentStatus: text("current_status"),
+	gate: text("gate"),
+	terminal: text("terminal"),
+	delayMinutes: integer("delay_minutes"),
+	lastPolledAt: integer("last_polled_at"),
+	isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+	createdAt: integer("created_at", { mode: "timestamp" })
+		.notNull()
+		.default(sql`(unixepoch())`),
+	updatedAt: integer("updated_at", { mode: "timestamp" })
+		.notNull()
+		.default(sql`(unixepoch())`)
+		.$onUpdate(() => new Date()),
+});
+
+export const trackedFlights = sqliteTable("tracked_flights", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	chatId: text("chat_id").notNull(),
+	flightId: integer("flight_id")
+		.notNull()
+		.references(() => flights.id, { onDelete: "cascade" }),
+	createdAt: integer("created_at", { mode: "timestamp" })
+		.notNull()
+		.default(sql`(unixepoch())`),
+});
+
+export const statusChanges = sqliteTable("status_changes", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	flightId: integer("flight_id")
+		.notNull()
+		.references(() => flights.id, { onDelete: "cascade" }),
+	oldStatus: text("old_status"),
+	newStatus: text("new_status").notNull(),
+	details: text("details"),
+	detectedAt: integer("detected_at", { mode: "timestamp" })
+		.notNull()
+		.default(sql`(unixepoch())`),
+});
