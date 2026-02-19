@@ -55,7 +55,7 @@ Use custom logger: `import { logger } from "../utils/logger.js"`. Set level via 
 
 ## Testing
 
-Test files: `*.test.ts` (co-located or `__tests__/`). Use Bun's native runner (`describe`, `test`, `expect`).
+Test files: `*.test.ts`. Use Bun's native runner (`describe`, `test`, `expect`).
 
 ```typescript
 import { describe, test, expect } from "bun:test";
@@ -72,8 +72,6 @@ describe("parseFlightNumber", () => {
 
 ## Bot Patterns
 
-### Handler Registration
-
 **Natural-language handler must be imported last**:
 
 ```typescript
@@ -82,24 +80,13 @@ import "../handlers/track.js";
 import "../handlers/natural-language.js"; // MUST BE LAST
 ```
 
-### Instance Pattern
-
-```typescript
-// src/bot/instance.ts - export const bot = new Bot(botToken);
-// src/bot/index.ts - export { bot } from "./instance.js"; export async function startBot() { await bot.start(); }
-```
-
-### Message Formatting
-
-Return early on errors. Use `{ parse_mode: "Markdown" }`. Emoji prefixes: ✅ ❌ ⚠️ ℹ️
+Instance: `src/bot/instance.ts` exports bot, `src/bot/index.ts` exports start/stop. Return early on errors. Use `{ parse_mode: "Markdown" }`. Emoji: ✅ ❌ ⚠️ ℹ️
 
 ---
 
 ## Services
 
 API services use classes with caching. Create instances at module level: `const api = new AviationstackAPI();`
-
-### API Budget
 
 ```typescript
 import { canMakeRequest, recordRequest } from "../services/api-budget.js";
@@ -111,7 +98,7 @@ await recordRequest();
 
 ## Database
 
-### Schema (Drizzle)
+Schema (Drizzle):
 
 ```typescript
 export const flights = sqliteTable("flights", {
@@ -128,7 +115,7 @@ export const flights = sqliteTable("flights", {
 });
 ```
 
-### Query Patterns
+Queries:
 
 ```typescript
 const flight = await db.query.flights.findFirst({ where: eq(flights.id, id) });
@@ -149,10 +136,10 @@ src/
 ├── bot/instance.ts    # Bot instance
 ├── bot/index.ts       # Handler imports, start/stop
 ├── db/index.ts        # DB connection
-├── db/schema.ts      # Drizzle schema
-├── services/         # Business logic
-├── handlers/         # Command handlers
-└── utils/           # Shared utilities
+├── db/schema.ts       # Drizzle schema
+├── services/          # Business logic
+├── handlers/          # Command handlers
+└── utils/             # Shared utilities
 ```
 
 ---
