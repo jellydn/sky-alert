@@ -127,30 +127,37 @@ export class AviationstackAPI {
 		return (await response.json()) as AviationstackResponse;
 	}
 
-	async getFlightByNumber(
+	async getFlightsByNumber(
 		flightNumber: string,
 		date: string,
-	): Promise<AviationstackFlight | null> {
-		const cacheKey = `flight:${flightNumber}:${date}`;
-		const cached = this.getCached<AviationstackFlight | null>(cacheKey);
+	): Promise<AviationstackFlight[]> {
+		const cacheKey = `flights:${flightNumber}:${date}`;
+		const cached = this.getCached<AviationstackFlight[]>(cacheKey);
 		if (cached !== undefined) return cached;
 
 		const url = new URL(`${API_BASE_URL}/flights`);
 		url.searchParams.append("access_key", this.apiKey);
 		url.searchParams.append("flight_iata", flightNumber);
-		url.searchParams.append("flight_date", date);
 
 		try {
 			const data = await this.fetchWithBudget(url);
-			const result = data.data.length === 0 ? null : data.data[0];
-			this.setCache(cacheKey, result);
-			return result;
+			const matching = data.data.filter((f) => f.flight_date === date);
+			this.setCache(cacheKey, matching);
+			return matching;
 		} catch (error) {
 			if (error instanceof Error) {
 				throw error;
 			}
 			throw new Error("Failed to fetch flight data");
 		}
+	}
+
+	async getFlightByNumber(
+		flightNumber: string,
+		date: string,
+	): Promise<AviationstackFlight | null> {
+		const flights = await this.getFlightsByNumber(flightNumber, date);
+		return flights.length === 0 ? null : flights[0];
 	}
 
 	async getFlightsByRoute(
@@ -166,12 +173,12 @@ export class AviationstackAPI {
 		url.searchParams.append("access_key", this.apiKey);
 		url.searchParams.append("dep_iata", origin);
 		url.searchParams.append("arr_iata", destination);
-		url.searchParams.append("flight_date", date);
 
 		try {
 			const data = await this.fetchWithBudget(url);
-			this.setCache(cacheKey, data.data);
-			return data.data;
+			const matching = data.data.filter((f) => f.flight_date === date);
+			this.setCache(cacheKey, matching);
+			return matching;
 		} catch (error) {
 			if (error instanceof Error) {
 				throw error;
