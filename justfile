@@ -27,13 +27,13 @@ format:
 
 # Database
 db-generate:
-    drizzle-kit generate
+    ./node_modules/.bin/drizzle-kit generate
 
 db-migrate:
-    drizzle-kit migrate
+    ./node_modules/.bin/drizzle-kit migrate
 
-db-studio:
-    drizzle-kit studio
+db-studio port="4984":
+    ./node_modules/.bin/drizzle-kit studio --port {{port}}
 
 # Install
 install:
