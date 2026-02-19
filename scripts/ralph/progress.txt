@@ -1,3 +1,16 @@
 # Ralph Progress Log
 Started: Thu Feb 19 11:09:23 +08 2026
 ---
+
+## Thu Feb 19 11:12:34 +08 2026 - US-001
+- Initialized TypeScript project with grammy, drizzle-orm, and better-sqlite3
+- Created database schema with three tables: flights, tracked_flights, status_changes
+- Set up Drizzle ORM configuration and generated migrations
+- Database migrations run successfully with all tables created
+- Typecheck passes
+- Files changed: package.json, tsconfig.json, drizzle.config.ts, src/db/schema.ts, src/db/index.ts, src/index.ts, .env.example, .gitignore
+**Learnings for future iterations:**
+- Drizzle Kit uses "dialect: 'sqlite'" instead of "driver" in config
+- Migrations are generated in drizzle/ directory and should be committed
+- SQLite database file is created in data/ directory on first migration
+---
