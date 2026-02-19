@@ -12,9 +12,10 @@
 
 - **Track flights** by flight number, natural language, or route (e.g., `DAD to SIN today`)
 - **Real-time alerts** — check-in open, delays, gate changes, boarding, departure, landing, cancellation
-- **Adaptive polling** — every 5 min normally, every 1 min near departure
+- **Adaptive polling** — every 15 min (far), 5 min (near), 1 min (imminent)
 - **Multi-user** — multiple users can track the same flight with deduplicated API calls
 - **Auto-cleanup** — expired flights are deactivated and removed automatically
+- **Live refresh fallback** — uses FlightAware parsing when Aviationstack returns low-signal status data
 
 ## Tech Stack
 
@@ -53,9 +54,17 @@ bun run typecheck
 bun run lint
 ```
 
+### Justfile shortcuts
+
+```bash
+just dev
+just db-generate
+just db-migrate
+just db-studio
+```
+
 <img width="1179" height="1402" alt="image" src="https://github.com/user-attachments/assets/7482a219-3737-46da-a5c0-9d8cca170a39" />
 <img width="1179" height="2429" alt="image" src="https://github.com/user-attachments/assets/fb4d642e-14cf-42bf-92b4-09674128bd91" />
-
 
 ## Environment Variables
 
@@ -100,7 +109,48 @@ The bot also understands natural language:
           │
           ▼
    Aviationstack API
+          │
+          ▼ (fallback when needed)
+     FlightAware page parser
 ```
+
+## Status Refresh, Timeout, and Fallback Rules
+
+### Refresh timing
+
+- `/status` refreshes flight data when either condition is true:
+- Data is stale (`>= 15 minutes` since last poll)
+- Data is low-signal (`scheduled`/empty status and no delay)
+- Polling worker interval by time-to-departure:
+- `> 3h`: every `15 minutes`
+- `<= 3h`: every `5 minutes`
+- `<= 1h`: every `1 minute`
+
+### Caching
+
+- Aviationstack response cache TTL: `15 minutes`
+- Live refresh paths (`/status`, polling worker) bypass cache to force fresh provider data
+
+### Selection timeout
+
+- Multi-result flight selection (route or ambiguous number) expires after `5 minutes`
+- If expired, user must search/select again
+
+### Fallback behavior
+
+- Primary source is Aviationstack
+- Fallback to FlightAware is used only when Aviationstack is low-signal:
+- Status is `scheduled` or empty, and delay is missing/non-positive
+- Fallback tries multiple identifiers (`ICAO`, `IATA`, user input), e.g. `TGW315` then `TR315`
+- If fallback provides delay, `/status` shows:
+- `Status: delayed` (if no stronger status from primary)
+- `Delay: X min`
+- `Estimated` departure and arrival times (scheduled + delay)
+
+### Known limitations
+
+- If both providers return no delay signal, bot will remain on scheduled/on-time data
+- FlightAware fallback is HTML/bootstrap parsing, not an official FlightAware API
 
 ## Author
 
