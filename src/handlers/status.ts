@@ -4,11 +4,10 @@ import { bot } from "../bot/instance.js";
 import { db } from "../db/index.js";
 import { flights, statusChanges, trackedFlights } from "../db/schema.js";
 import { canMakeRequest } from "../services/api-budget.js";
-import { AviationstackAPI } from "../services/aviationstack.js";
+import { aviationstackApi } from "../services/aviationstack.js";
 import { formatDateTime } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
 
-const api = new AviationstackAPI();
 const STALE_THRESHOLD = 15 * 60 * 1000; // 15 minutes
 
 bot.command("status", async (ctx: Context) => {
@@ -33,6 +32,8 @@ bot.command("status", async (ctx: Context) => {
 	}
 
 	try {
+		let refreshFailed = false;
+
 		const userTrackings = await db
 			.select({
 				flight: flights,
@@ -62,7 +63,10 @@ bot.command("status", async (ctx: Context) => {
 
 		if (shouldRefresh) {
 			try {
-				const apiFlights = await api.getFlightsByNumber(flight.flightNumber, flight.flightDate);
+				const apiFlights = await aviationstackApi.getFlightsByNumber(
+					flight.flightNumber,
+					flight.flightDate,
+				);
 				if (apiFlights.length > 0) {
 					const apiFlight = apiFlights[0];
 					const oldStatus = flight.currentStatus;
@@ -92,8 +96,9 @@ bot.command("status", async (ctx: Context) => {
 					});
 					if (updated) flight = updated;
 				}
-			} catch {
-				// Silently fall back to cached data
+			} catch (error) {
+				refreshFailed = true;
+				logger.warn(`Live refresh failed for ${flight.flightNumber}:`, error);
 			}
 		}
 
@@ -157,6 +162,9 @@ bot.command("status", async (ctx: Context) => {
 		if (flight.lastPolledAt) {
 			const ago = Math.round((Date.now() - flight.lastPolledAt * 1000) / 60000);
 			message += `\n_Updated ${ago} min ago_`;
+		}
+		if (refreshFailed) {
+			message += "\n_⚠️ Could not refresh live status. Showing latest cached data._";
 		}
 
 		await ctx.reply(message, { parse_mode: "Markdown" });

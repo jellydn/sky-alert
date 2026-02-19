@@ -4,24 +4,35 @@ import { db } from "../db/index.js";
 import { flights, statusChanges, trackedFlights } from "../db/schema.js";
 import { logger } from "../utils/logger.js";
 import { isPollingEnabled } from "./api-budget.js";
-import { AviationstackAPI } from "./aviationstack.js";
-
-const api = new AviationstackAPI();
+import { aviationstackApi } from "./aviationstack.js";
 
 const POLL_INTERVAL_FAR = 15 * 60 * 1000;
 const POLL_INTERVAL_NEAR = 5 * 60 * 1000;
 const POLL_INTERVAL_IMMINENT = 1 * 60 * 1000;
 const HOURS_BEFORE_START_POLLING = 6;
 const WORKER_CHECK_INTERVAL = 1 * 60 * 1000;
+let pollingTimer: ReturnType<typeof setInterval> | null = null;
 
 export function startPollingWorker() {
+	if (pollingTimer) {
+		return;
+	}
+
 	logger.info("✓ Starting polling worker (budget-aware)");
 
-	setInterval(async () => {
+	pollingTimer = setInterval(async () => {
 		if (await isPollingEnabled()) {
 			await pollFlights();
 		}
 	}, WORKER_CHECK_INTERVAL);
+}
+
+export function stopPollingWorker() {
+	if (pollingTimer) {
+		clearInterval(pollingTimer);
+		pollingTimer = null;
+		logger.info("✓ Polling worker stopped");
+	}
 }
 
 function getPollInterval(scheduledDeparture: Date, now: Date): number {
@@ -74,7 +85,7 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 		}
 
 		const flight = currentFlight[0];
-		const apiFlights = await api.getFlightsByNumber(flightNumber, flightDate);
+		const apiFlights = await aviationstackApi.getFlightsByNumber(flightNumber, flightDate);
 
 		if (apiFlights.length === 0) {
 			return;
