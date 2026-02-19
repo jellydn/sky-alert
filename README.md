@@ -1,4 +1,6 @@
-# ✈️ SkyAlert
+# ![SkyAlert Logo](logo.svg)
+
+## ✈️ SkyAlert
 
 Real-time flight monitoring Telegram bot. Track flights, get instant alerts on delays, gate changes, boarding, and more.
 

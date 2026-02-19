@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" fill="none">
+  <!-- Aircraft icon -->
+  <g transform="translate(20, 20)">
+    <!-- Flight path line -->
+    <path d="M 5 45 Q 25 45, 35 35 L 65 15" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 4" opacity="0.4"/>
+    <!-- Alert pulse rings -->
+    <circle cx="75" cy="35" r="18" stroke="#EF4444" stroke-width="2" opacity="0.3"/>
+    <circle cx="75" cy="35" r="24" stroke="#EF4444" stroke-width="1.5" opacity="0.15"/>
+    <!-- Aircraft body -->
+    <path d="M 60 42 L 70 28 L 85 28 L 75 35 L 95 35 L 100 33 L 100 37 L 95 35 L 75 35 L 85 42 L 70 42 Z" fill="#1E40AF"/>
+    <!-- Alert dot -->
+    <circle cx="90" cy="25" r="4" fill="#EF4444"/>
+  </g>
+
+  <!-- SkyAlert text -->
+  <text x="140" y="62" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="42" font-weight="700" fill="#1E293B">
+    Sky<tspan fill="#3B82F6">Alert</tspan>
+  </text>
+
+  <!-- Tagline -->
+  <text x="140" y="85" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="500" fill="#64748B" letter-spacing="2">
+    FLIGHT MONITORING
+  </text>
+</svg>
