@@ -14,3 +14,17 @@ Started: Thu Feb 19 11:09:23 +08 2026
 - Migrations are generated in drizzle/ directory and should be committed
 - SQLite database file is created in data/ directory on first migration
 ---
+
+## Thu Feb 19 11:15:42 +08 2026 - US-002
+- Set up Telegram bot using grammY framework
+- Implemented /start command with welcome message
+- Implemented /help command with list of available commands
+- Bot connects to Telegram using BOT_TOKEN env variable
+- Bot uses long polling (default grammY behavior)
+- Typecheck passes
+- Files changed: src/bot/index.ts, src/index.ts
+**Learnings for future iterations:**
+- grammY's auto-quote middleware package doesn't exist or has different name - skip for now
+- Bot needs to be started after database connection is verified
+- grammY uses ctx.reply() with parse_mode for formatted messages
+---
