@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { bot } from "../bot/instance.js";
 import { db } from "../db/index.js";
 import { flights, statusChanges, trackedFlights } from "../db/schema.js";
+import { preferKnownStatus, shouldUseStatusFallback } from "../utils/flight-status.js";
 import { logger } from "../utils/logger.js";
 import { isPollingEnabled } from "./api-budget.js";
 import { aviationstackApi } from "./aviationstack.js";
@@ -15,10 +16,6 @@ const POLL_INTERVAL_IMMINENT = 1 * 60 * 1000;
 const HOURS_BEFORE_START_POLLING = 6;
 const WORKER_CHECK_INTERVAL = 1 * 60 * 1000;
 let pollingTimer: ReturnType<typeof setInterval> | null = null;
-
-function shouldUseFallback(status: string, delayMinutes?: number): boolean {
-	return (!delayMinutes || delayMinutes <= 0) && (status === "scheduled" || status.length === 0);
-}
 
 function parseCarrierAndNumber(flightCode: string): { carrier?: string; number?: string } {
 	const match = flightCode.match(/^([A-Z]{2,3})(\d{1,4})$/);
@@ -114,12 +111,12 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 			return;
 		}
 		let nextDelayMinutes = getDelayMinutes(apiFlight);
-		let nextStatus = apiFlight.flight_status;
+		let nextStatus = preferKnownStatus(flight.currentStatus || undefined, apiFlight.flight_status);
 		let nextGate = apiFlight.departure.gate || undefined;
 		let nextTerminal = apiFlight.departure.terminal || undefined;
 		let flightStatsFallbackUsed = false;
 
-		if (shouldUseFallback(nextStatus, nextDelayMinutes)) {
+		if (shouldUseStatusFallback(nextStatus, nextDelayMinutes)) {
 			const parsedCode = parseCarrierAndNumber(flightNumber);
 			const carrierCode =
 				apiFlight.airline.iata || parsedCode.carrier || apiFlight.flight.iata.slice(0, 2);
@@ -133,8 +130,8 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 				if (flightStatsFallback.delayMinutes && flightStatsFallback.delayMinutes > 0) {
 					nextDelayMinutes = flightStatsFallback.delayMinutes;
 				}
-				if (flightStatsFallback.status && shouldUseFallback(nextStatus, nextDelayMinutes)) {
-					nextStatus = flightStatsFallback.status;
+				if (flightStatsFallback.status && shouldUseStatusFallback(nextStatus, nextDelayMinutes)) {
+					nextStatus = preferKnownStatus(nextStatus, flightStatsFallback.status);
 				}
 				if (flightStatsFallback.departureGate) {
 					nextGate = flightStatsFallback.departureGate;
@@ -144,7 +141,7 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 				}
 			}
 
-			if (!flightStatsFallbackUsed || shouldUseFallback(nextStatus, nextDelayMinutes)) {
+			if (!flightStatsFallbackUsed || shouldUseStatusFallback(nextStatus, nextDelayMinutes)) {
 				const fallback = await getFlightAwareFallback(
 					[apiFlight.flight.icao, apiFlight.flight.iata, flightNumber],
 					flight.origin,
@@ -153,24 +150,26 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 				if (fallback?.delayMinutes && fallback.delayMinutes > 0) {
 					nextDelayMinutes = fallback.delayMinutes;
 				}
-				if (fallback?.status && shouldUseFallback(nextStatus, nextDelayMinutes)) {
-					nextStatus = fallback.status;
+				if (fallback?.status && shouldUseStatusFallback(nextStatus, nextDelayMinutes)) {
+					nextStatus = preferKnownStatus(nextStatus, fallback.status);
 				}
 			}
 		}
 
+		const finalStatus = preferKnownStatus(flight.currentStatus || undefined, nextStatus);
+
 		const changes: { field: string; from: string; to: string }[] = [];
 
-		if (flight.currentStatus !== nextStatus) {
+		if (flight.currentStatus !== finalStatus && finalStatus) {
 			changes.push({
 				field: "Status",
 				from: flight.currentStatus || "N/A",
-				to: nextStatus,
+				to: finalStatus,
 			});
 			await db.insert(statusChanges).values({
 				flightId,
 				oldStatus: flight.currentStatus,
-				newStatus: nextStatus,
+				newStatus: finalStatus,
 			});
 		}
 
@@ -223,7 +222,7 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 		await db
 			.update(flights)
 			.set({
-				currentStatus: nextStatus,
+				currentStatus: finalStatus,
 				gate: nextGate,
 				terminal: nextTerminal,
 				delayMinutes: nextDelayMinutes,

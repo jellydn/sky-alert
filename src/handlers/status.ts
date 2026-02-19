@@ -8,14 +8,11 @@ import { aviationstackApi } from "../services/aviationstack.js";
 import { getDelayMinutes, selectBestMatchingFlight } from "../services/flight-service.js";
 import { getFlightAwareFallback } from "../services/flightaware-fallback.js";
 import { getFlightStatsFallback } from "../services/flightstats-fallback.js";
+import { preferKnownStatus, shouldUseStatusFallback } from "../utils/flight-status.js";
 import { formatDateTime } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
 
 const STALE_THRESHOLD = 15 * 60 * 1000; // 15 minutes
-
-function shouldUseFallback(status: string, delayMinutes?: number): boolean {
-	return (!delayMinutes || delayMinutes <= 0) && (status === "scheduled" || status.length === 0);
-}
 
 function addMinutesToIso(isoString: string, minutes: number): string | undefined {
 	const baseTimeMs = Date.parse(isoString);
@@ -91,7 +88,7 @@ bot.command("status", async (ctx: Context) => {
 		const isStale = Date.now() - lastPolled >= STALE_THRESHOLD;
 		const isFlightActive =
 			flight.currentStatus !== "landed" && flight.currentStatus !== "cancelled";
-		const hasLowSignalStatus = shouldUseFallback(
+		const hasLowSignalStatus = shouldUseStatusFallback(
 			flight.currentStatus || "",
 			flight.delayMinutes || undefined,
 		);
@@ -111,12 +108,15 @@ bot.command("status", async (ctx: Context) => {
 						throw new Error("No matching API flight found");
 					}
 					let nextDelayMinutes = getDelayMinutes(apiFlight);
-					let newStatus = apiFlight.flight_status;
+					let newStatus = preferKnownStatus(
+						flight.currentStatus || undefined,
+						apiFlight.flight_status,
+					);
 					let nextGate = apiFlight.departure.gate || undefined;
 					let nextTerminal = apiFlight.departure.terminal || undefined;
 					let flightStatsFallbackUsed = false;
 
-					if (shouldUseFallback(newStatus, nextDelayMinutes)) {
+					if (shouldUseStatusFallback(newStatus, nextDelayMinutes)) {
 						const parsedCode = parseCarrierAndNumber(flight.flightNumber);
 						const carrierCode =
 							apiFlight.airline.iata || parsedCode.carrier || apiFlight.flight.iata.slice(0, 2);
@@ -131,8 +131,11 @@ bot.command("status", async (ctx: Context) => {
 							if (flightStatsFallback.delayMinutes && flightStatsFallback.delayMinutes > 0) {
 								nextDelayMinutes = flightStatsFallback.delayMinutes;
 							}
-							if (flightStatsFallback.status && shouldUseFallback(newStatus, nextDelayMinutes)) {
-								newStatus = flightStatsFallback.status;
+							if (
+								flightStatsFallback.status &&
+								shouldUseStatusFallback(newStatus, nextDelayMinutes)
+							) {
+								newStatus = preferKnownStatus(newStatus, flightStatsFallback.status);
 							}
 							if (flightStatsFallback.departureGate) {
 								nextGate = flightStatsFallback.departureGate;
@@ -146,7 +149,7 @@ bot.command("status", async (ctx: Context) => {
 							liveArrivalTerminal = flightStatsFallback.arrivalTerminal;
 						}
 
-						if (!flightStatsFallbackUsed || shouldUseFallback(newStatus, nextDelayMinutes)) {
+						if (!flightStatsFallbackUsed || shouldUseStatusFallback(newStatus, nextDelayMinutes)) {
 							const fallback = await getFlightAwareFallback(
 								[apiFlight.flight.icao, apiFlight.flight.iata, flight.flightNumber],
 								flight.origin,
@@ -155,25 +158,26 @@ bot.command("status", async (ctx: Context) => {
 							if (fallback?.delayMinutes && fallback.delayMinutes > 0) {
 								nextDelayMinutes = fallback.delayMinutes;
 							}
-							if (fallback?.status && shouldUseFallback(newStatus, nextDelayMinutes)) {
-								newStatus = fallback.status;
+							if (fallback?.status && shouldUseStatusFallback(newStatus, nextDelayMinutes)) {
+								newStatus = preferKnownStatus(newStatus, fallback.status);
 							}
 						}
 					}
 					const oldStatus = flight.currentStatus;
+					const finalStatus = preferKnownStatus(oldStatus || undefined, newStatus);
 
-					if (oldStatus !== newStatus) {
+					if (oldStatus !== finalStatus && finalStatus) {
 						await db.insert(statusChanges).values({
 							flightId: flight.id,
 							oldStatus,
-							newStatus,
+							newStatus: finalStatus,
 						});
 					}
 
 					await db
 						.update(flights)
 						.set({
-							currentStatus: newStatus,
+							currentStatus: finalStatus,
 							gate: nextGate,
 							terminal: nextTerminal,
 							delayMinutes: nextDelayMinutes,
@@ -185,7 +189,7 @@ bot.command("status", async (ctx: Context) => {
 						where: eq(flights.id, flight.id),
 					});
 					if (updated) flight = updated;
-					displayStatus = newStatus || displayStatus;
+					displayStatus = finalStatus || displayStatus;
 					displayDelayMinutes = nextDelayMinutes || undefined;
 					displayDepartureGate = nextGate;
 					displayDepartureTerminal = nextTerminal;
@@ -205,7 +209,7 @@ bot.command("status", async (ctx: Context) => {
 						parsedCode.number,
 					);
 					if (flightStatsFallback?.status) {
-						displayStatus = flightStatsFallback.status;
+						displayStatus = preferKnownStatus(displayStatus, flightStatsFallback.status) || "";
 					}
 					if (flightStatsFallback?.delayMinutes && flightStatsFallback.delayMinutes > 0) {
 						displayDelayMinutes = flightStatsFallback.delayMinutes;
