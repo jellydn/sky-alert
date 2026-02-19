@@ -124,3 +124,22 @@ Started: Thu Feb 19 11:09:23 +08 2026
 - Use delete() with where clause to remove tracking entries
 - Always confirm user actions with details of what was removed
 ---
+
+## Thu Feb 19 11:36:14 +08 2026 - US-009
+- Created polling service with setInterval for background worker
+- Worker runs in the same process as the bot
+- Worker queries all active flights that need polling
+- Polls every 5 minutes for flights > 3 hours from departure
+- Polls every 1 minute for flights within 3 hours of departure
+- Stops polling flights that landed > 2 hours ago or are cancelled
+- Deduplicates: only one API call per unique flight regardless of trackers
+- Updates flight record with latest status, gate, terminal, delay info
+- Respects Aviationstack API rate limits by reusing same interval per flight
+- Typecheck passes
+- Files changed: src/services/polling-service.ts, src/index.ts
+**Learnings for future iterations:**
+- Use Map to track intervals per flight to prevent duplicate polling
+- Use Math.floor(Date.now() / 1000) for Unix timestamps in SQLite
+- Stop polling for flights that are no longer active to save API calls
+- Combine time-based conditions with OR logic for filtering active flights
+---
