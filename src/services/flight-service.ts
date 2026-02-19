@@ -49,20 +49,18 @@ export async function getFlightByNumberAndDate(flightNumber: string, flightDate:
 }
 
 export async function trackFlight(chatId: string, flightId: number) {
-	const existing = await db.query.trackedFlights.findFirst({
-		where: and(eq(trackedFlights.chatId, chatId), eq(trackedFlights.flightId, flightId)),
-	});
+	const result = await db
+		.insert(trackedFlights)
+		.values({
+			chatId,
+			flightId,
+		})
+		.onConflictDoNothing({
+			target: [trackedFlights.chatId, trackedFlights.flightId],
+		})
+		.returning({ id: trackedFlights.id });
 
-	if (existing) {
-		return false;
-	}
-
-	await db.insert(trackedFlights).values({
-		chatId,
-		flightId,
-	});
-
-	return true;
+	return result.length > 0;
 }
 
 export async function untrackFlight(chatId: string, flightId: number) {
