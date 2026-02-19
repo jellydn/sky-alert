@@ -38,6 +38,10 @@ export const trackedFlights = sqliteTable(
 			.notNull()
 			.references(() => flights.id, { onDelete: "cascade" }),
 		createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+		updatedAt: integer("updated_at", { mode: "timestamp" })
+			.notNull()
+			.default(sql`(unixepoch())`)
+			.$onUpdate(() => new Date()),
 	},
 	(table) => [
 		uniqueIndex("tracked_flights_chat_id_flight_id_unique").on(table.chatId, table.flightId),

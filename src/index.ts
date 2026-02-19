@@ -21,7 +21,7 @@ async function shutdown(signal: string) {
 	try {
 		stopPollingWorker();
 		stopCleanupWorker();
-		stopBot();
+		await stopBot();
 		closeDatabase();
 		logger.info("✓ Graceful shutdown completed");
 		process.exit(0);

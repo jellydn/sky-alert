@@ -97,6 +97,10 @@ export class AviationstackAPI {
 			this.cache.delete(key);
 			return undefined;
 		}
+
+		// Refresh insertion order on reads to make eviction LRU by access.
+		this.cache.delete(key);
+		this.cache.set(key, entry);
 		return entry.data as T;
 	}
 

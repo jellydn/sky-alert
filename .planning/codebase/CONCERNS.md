@@ -24,9 +24,9 @@
 - No per-user command rate limiting.
 - Handler-order fragility remains (natural-language handler must stay last).
 - Broad test quality gap remains (many tests are string/pattern checks, not handler/service integration behavior).
-- No health check endpoint.
-- No external error reporting.
-- No DB backup strategy.
+- Health check endpoint is still missing.
+- External error reporting is not configured.
+- Database backup strategy is not defined.
 
 ## Tech Debt
 
@@ -42,11 +42,10 @@
 
 ## Known Bugs / Risks
 
-**Migration History Drift (New)**
-- Files: `drizzle/0000_low_tyger_tiger.sql`, `drizzle/0000_bumpy_sunfire.sql`
-- Symptoms: Two `0000_*` baseline migrations exist and may cause confusion for fresh setups
-- Risk: Unclear canonical baseline for new environments
-- Next fix: Consolidate/clean migration history and document canonical migration path
+**Migration History Drift (Resolved)**
+- Files: `drizzle/0000_bumpy_sunfire.sql`
+- Resolution: Removed duplicate legacy baseline migration files and kept a single canonical `0000_*` baseline
+- Follow-up: Keep migration numbering strictly sequential from this baseline
 
 **Pending Selection Volatility (Open)**
 - Files: `src/utils/pending-selections.ts`

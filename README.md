@@ -63,6 +63,8 @@ just db-migrate
 just db-studio
 ```
 
+Note: `drizzle-kit` SQLite commands rely on `better-sqlite3` at dev time for DB connectivity.
+
 <img width="1179" height="1402" alt="image" src="https://github.com/user-attachments/assets/7482a219-3737-46da-a5c0-9d8cca170a39" />
 <img width="1179" height="2429" alt="image" src="https://github.com/user-attachments/assets/fb4d642e-14cf-42bf-92b4-09674128bd91" />
 
