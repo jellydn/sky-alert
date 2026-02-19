@@ -1,6 +1,7 @@
 import { and, eq, gt, lt, or } from "drizzle-orm";
+import { bot } from "../bot/index.js";
 import { db } from "../db/index.js";
-import { flights } from "../db/schema.js";
+import { flights, statusChanges, trackedFlights } from "../db/schema.js";
 import { AviationstackAPI } from "./aviationstack.js";
 
 const api = new AviationstackAPI();
@@ -95,10 +96,86 @@ async function pollFlight(
 	flightDate: string,
 ) {
 	try {
+		const currentFlight = await db
+			.select()
+			.from(flights)
+			.where(eq(flights.id, flightId))
+			.limit(1);
+
+		if (currentFlight.length === 0) {
+			return;
+		}
+
+		const flight = currentFlight[0];
 		const apiFlight = await api.getFlightByNumber(flightNumber, flightDate);
 
 		if (!apiFlight) {
 			return;
+		}
+
+		const oldStatus = flight.currentStatus;
+		const newStatus = apiFlight.flight_status;
+		const oldGate = flight.gate;
+		const newGate = apiFlight.departure.gate;
+		const oldTerminal = flight.terminal;
+		const newTerminal = apiFlight.departure.terminal;
+		const oldDelay = flight.delayMinutes;
+		const newDelay = apiFlight.departure.delay;
+
+		const statusChanged = oldStatus !== newStatus;
+		const gateChanged = oldGate !== newGate && newGate !== undefined;
+		const terminalChanged =
+			oldTerminal !== newTerminal && newTerminal !== undefined;
+		const delayChanged = oldDelay !== newDelay;
+
+		if (statusChanged || gateChanged || terminalChanged) {
+			let details = "";
+
+			if (statusChanged) {
+				await db.insert(statusChanges).values({
+					flightId,
+					oldStatus,
+					newStatus,
+					details: undefined,
+				});
+			}
+
+			if (delayChanged && newDelay && newDelay > 0) {
+				details += `Delay: ${newDelay} min\n`;
+			}
+
+			if (gateChanged) {
+				details += `Gate: ${oldGate || "N/A"} → ${newGate}\n`;
+			}
+
+			if (terminalChanged) {
+				details += `Terminal: ${oldTerminal || "N/A"} → ${newTerminal}\n`;
+			}
+
+			const trackers = await db
+				.select()
+				.from(trackedFlights)
+				.where(eq(trackedFlights.flightId, flightId));
+
+			for (const tracker of trackers) {
+				let message = `🚨 *${flightNumber} Update*\n\n`;
+
+				if (statusChanged) {
+					message += `Status: ${oldStatus || "N/A"} → ${newStatus}\n`;
+				}
+
+				if (details) {
+					message += `\n${details}`;
+				}
+
+				try {
+					await bot.api.sendMessage(tracker.chatId, message, {
+						parse_mode: "Markdown",
+					});
+				} catch (error) {
+					console.error(`Error sending alert to ${tracker.chatId}:`, error);
+				}
+			}
 		}
 
 		await db

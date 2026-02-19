@@ -143,3 +143,20 @@ Started: Thu Feb 19 11:09:23 +08 2026
 - Stop polling for flights that are no longer active to save API calls
 - Combine time-based conditions with OR logic for filtering active flights
 ---
+
+## Thu Feb 19 11:39:28 +08 2026 - US-010
+- Updated polling service to detect status changes and send alerts
+- When polling detects a status change, inserts record into status_changes table
+- Sends Telegram message to ALL chat_ids tracking that flight
+- Message includes: flight number, old status → new status, relevant details (delay duration, new gate, etc.)
+- Alerts sent for: check-in open, delay, gate change, boarding, final call, departed, landed, cancelled
+- Gate or terminal changes (even without status change) also trigger alerts
+- Typecheck passes
+- Files changed: src/services/polling-service.ts
+**Learnings for future iterations:**
+- Fetch current flight state before updating to detect changes
+- Track old and new values for comparison (status, gate, terminal, delay)
+- Use bot.api.sendMessage() to send messages to specific chat IDs
+- Wrap individual message sends in try/catch to prevent one failure from blocking others
+- Build alert message dynamically based on what changed
+---
