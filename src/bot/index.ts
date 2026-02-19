@@ -1,4 +1,5 @@
 import { Bot, GrammyError } from "grammy";
+import "../handlers/track.js";
 
 const botToken = process.env.BOT_TOKEN;
 

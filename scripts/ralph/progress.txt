@@ -28,3 +28,20 @@ Started: Thu Feb 19 11:09:23 +08 2026
 - Bot needs to be started after database connection is verified
 - grammY uses ctx.reply() with parse_mode for formatted messages
 ---
+
+## Thu Feb 19 11:18:52 +08 2026 - US-003
+- Created Aviationstack API service with flight lookup functionality
+- Implemented flight service with database operations (create, get, track, untrack)
+- Created /track command handler that parses flight number and date
+- Bot validates flight existence via Aviationstack API
+- If valid, saves flight to flights table and links to chat_id in tracked_flights
+- Bot replies with confirmation showing flight number, route, and times
+- Error handling for flight not found, rate limits, and API errors
+- Typecheck passes
+- Files changed: src/services/aviationstack.ts, src/services/flight-service.ts, src/handlers/track.ts, src/bot/index.ts
+**Learnings for future iterations:**
+- Aviationstack API requires access_key query parameter
+- Use `as Type` casting for API responses when TypeScript can't infer types
+- Bot export must be imported from bot/index.js, not root index.js
+- Handlers should be imported to register their commands with the bot instance
+---
