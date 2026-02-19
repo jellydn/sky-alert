@@ -64,9 +64,10 @@ describe("track handler", () => {
 		}));
 
 		mock.module("../services/aviationstack.js", () => ({
-			AviationstackAPI: mock(() => ({
+			AviationstackAPI: mock(() => ({})),
+			aviationstackApi: {
 				getFlightsByNumber: mock(() => Promise.resolve([mockApiFlight])),
-			})),
+			},
 		}));
 
 		mock.module("../db/index.js", () => ({

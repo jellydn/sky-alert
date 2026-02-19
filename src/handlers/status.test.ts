@@ -23,9 +23,10 @@ describe("status handler", () => {
 		}));
 
 		mock.module("../services/aviationstack.js", () => ({
-			AviationstackAPI: mock(() => ({
+			AviationstackAPI: mock(() => ({})),
+			aviationstackApi: {
 				getFlightsByNumber: mock(() => Promise.resolve([])),
-			})),
+			},
 		}));
 
 		mock.module("../db/index.js", () => ({
