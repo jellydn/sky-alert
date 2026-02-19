@@ -65,9 +65,16 @@ export interface AviationstackResponse {
 }
 
 const API_BASE_URL = "https://api.aviationstack.com/v1";
+const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+
+interface CacheEntry<T> {
+	data: T;
+	timestamp: number;
+}
 
 export class AviationstackAPI {
 	private apiKey: string;
+	private cache = new Map<string, CacheEntry<unknown>>();
 
 	constructor() {
 		this.apiKey = process.env.AVIATIONSTACK_API_KEY || "";
@@ -76,35 +83,62 @@ export class AviationstackAPI {
 		}
 	}
 
+	private getCached<T>(key: string): T | undefined {
+		const entry = this.cache.get(key);
+		if (!entry) return undefined;
+		if (Date.now() - entry.timestamp > CACHE_TTL) {
+			this.cache.delete(key);
+			return undefined;
+		}
+		return entry.data as T;
+	}
+
+	private setCache<T>(key: string, data: T): void {
+		this.cache.set(key, { data, timestamp: Date.now() });
+	}
+
+	private async fetchWithBudget(url: URL): Promise<AviationstackResponse> {
+		const { canMakeRequest, recordRequest } = await import("./api-budget.js");
+
+		if (!(await canMakeRequest())) {
+			throw new Error("Monthly API budget exceeded");
+		}
+
+		const response = await fetch(url.toString());
+
+		if (!response.ok) {
+			if (response.status === 429) {
+				throw new Error("Rate limit exceeded");
+			}
+			if (response.status === 401) {
+				throw new Error("Invalid API key");
+			}
+			throw new Error(`API request failed: ${response.status}`);
+		}
+
+		await recordRequest();
+
+		return (await response.json()) as AviationstackResponse;
+	}
+
 	async getFlightByNumber(
 		flightNumber: string,
 		date: string,
 	): Promise<AviationstackFlight | null> {
+		const cacheKey = `flight:${flightNumber}:${date}`;
+		const cached = this.getCached<AviationstackFlight | null>(cacheKey);
+		if (cached !== undefined) return cached;
+
 		const url = new URL(`${API_BASE_URL}/flights`);
 		url.searchParams.append("access_key", this.apiKey);
 		url.searchParams.append("flight_iata", flightNumber);
 		url.searchParams.append("flight_date", date);
 
 		try {
-			const response = await fetch(url.toString());
-
-			if (!response.ok) {
-				if (response.status === 429) {
-					throw new Error("Rate limit exceeded");
-				}
-				if (response.status === 401) {
-					throw new Error("Invalid API key");
-				}
-				throw new Error(`API request failed: ${response.status}`);
-			}
-
-			const data = (await response.json()) as AviationstackResponse;
-
-			if (data.data.length === 0) {
-				return null;
-			}
-
-			return data.data[0];
+			const data = await this.fetchWithBudget(url);
+			const result = data.data.length === 0 ? null : data.data[0];
+			this.setCache(cacheKey, result);
+			return result;
 		} catch (error) {
 			if (error instanceof Error) {
 				throw error;
@@ -118,6 +152,10 @@ export class AviationstackAPI {
 		destination: string,
 		date: string,
 	): Promise<AviationstackFlight[]> {
+		const cacheKey = `route:${origin}:${destination}:${date}`;
+		const cached = this.getCached<AviationstackFlight[]>(cacheKey);
+		if (cached !== undefined) return cached;
+
 		const url = new URL(`${API_BASE_URL}/flights`);
 		url.searchParams.append("access_key", this.apiKey);
 		url.searchParams.append("dep_iata", origin);
@@ -125,20 +163,8 @@ export class AviationstackAPI {
 		url.searchParams.append("flight_date", date);
 
 		try {
-			const response = await fetch(url.toString());
-
-			if (!response.ok) {
-				if (response.status === 429) {
-					throw new Error("Rate limit exceeded");
-				}
-				if (response.status === 401) {
-					throw new Error("Invalid API key");
-				}
-				throw new Error(`API request failed: ${response.status}`);
-			}
-
-			const data = (await response.json()) as AviationstackResponse;
-
+			const data = await this.fetchWithBudget(url);
+			this.setCache(cacheKey, data.data);
 			return data.data;
 		} catch (error) {
 			if (error instanceof Error) {
