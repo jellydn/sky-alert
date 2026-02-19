@@ -66,7 +66,7 @@ function parseDate(message: string): string | null {
 	);
 	if (slashDateMatchShort) {
 		const [, day, month, year] = slashDateMatchShort;
-		const fullYear = parseInt(year) < 50 ? `20${year}` : `19${year}`;
+		const fullYear = parseInt(year, 10) < 50 ? `20${year}` : `19${year}`;
 		return `${fullYear}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 	}
 

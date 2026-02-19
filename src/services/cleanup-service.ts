@@ -1,4 +1,4 @@
-import { and, eq, gt, lt } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { flights } from "../db/schema.js";
 import { logger } from "../utils/logger.js";

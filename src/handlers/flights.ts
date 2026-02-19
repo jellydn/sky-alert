@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { Context } from "grammy";
 import { bot } from "../bot/instance.js";
 import { db } from "../db/index.js";

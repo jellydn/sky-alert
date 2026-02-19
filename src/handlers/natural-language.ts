@@ -105,10 +105,10 @@ bot.on("message:text", async (ctx: Context) => {
 	if (pendingSelection) {
 		const selection = message.trim();
 
-		const selectionNumber = parseInt(selection);
+		const selectionNumber = parseInt(selection, 10);
 
 		if (
-			!isNaN(selectionNumber) &&
+			!Number.isNaN(selectionNumber) &&
 			selectionNumber >= 1 &&
 			selectionNumber <= 5
 		) {
@@ -135,11 +135,12 @@ bot.on("message:text", async (ctx: Context) => {
 							"ℹ️ Flight already in database, tracking it for you...",
 						);
 					} else {
-						flightId = (await createFlight(flightInput))!;
-						if (!flightId) {
+						const createdId = await createFlight(flightInput);
+						if (!createdId) {
 							await ctx.reply("❌ Failed to save flight to database");
 							return;
 						}
+						flightId = createdId;
 					}
 
 					const alreadyTracking = await trackFlight(chatId, flightId);
@@ -219,11 +220,12 @@ bot.on("message:text", async (ctx: Context) => {
 				flightId = existingFlight.id;
 				await ctx.reply("ℹ️ Flight already in database, tracking it for you...");
 			} else {
-				flightId = (await createFlight(flightInput))!;
-				if (!flightId) {
+				const createdId = await createFlight(flightInput);
+				if (!createdId) {
 					await ctx.reply("❌ Failed to save flight to database");
 					return;
 				}
+				flightId = createdId;
 			}
 
 			const alreadyTracking = await trackFlight(chatId, flightId);

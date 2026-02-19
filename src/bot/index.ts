@@ -10,6 +10,13 @@ import "../handlers/status.js";
 import "../handlers/remove.js";
 import "../handlers/usage.js";
 
+bot.use(async (ctx, next) => {
+	logger.debug(
+		`Received update ${ctx.update.update_id}: ${ctx.message?.text ?? "(no text)"}`,
+	);
+	await next();
+});
+
 bot.command("start", async (ctx) => {
 	await ctx.reply(
 		"✈️ *Welcome to SkyAlert!*\n\n" +
@@ -49,7 +56,10 @@ bot.command("help", async (ctx) => {
 
 bot.catch((err) => {
 	const ctx = err.ctx;
-	logger.error(`Error while handling update ${ctx.update.update_id}:`, err.error);
+	logger.error(
+		`Error while handling update ${ctx.update.update_id}:`,
+		err.error,
+	);
 });
 
 export async function startBot() {
