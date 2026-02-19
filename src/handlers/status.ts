@@ -60,16 +60,19 @@ bot.command("status", async (ctx: Context) => {
 
 		const lastPolled = flight.lastPolledAt ? flight.lastPolledAt * 1000 : 0;
 		const isStale = Date.now() - lastPolled > STALE_THRESHOLD;
-		const isActive =
+		const isFlightActive =
 			flight.currentStatus !== "landed" && flight.currentStatus !== "cancelled";
+		const canRefresh = await canMakeRequest();
+		const shouldRefresh = isStale && isFlightActive && canRefresh;
 
-		if (isStale && isActive && (await canMakeRequest())) {
+		if (shouldRefresh) {
 			try {
-				const apiFlight = await api.getFlightByNumber(
+				const apiFlights = await api.getFlightsByNumber(
 					flight.flightNumber,
 					flight.flightDate,
 				);
-				if (apiFlight) {
+				if (apiFlights.length > 0) {
+					const apiFlight = apiFlights[0];
 					const oldStatus = flight.currentStatus;
 					const newStatus = apiFlight.flight_status;
 
