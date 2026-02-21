@@ -44,3 +44,36 @@ export function formatDateTime(isoString: string): string {
 
 	return `${months[parseInt(month, 10) - 1]} ${parseInt(day, 10)}, ${displayHours}:${minutes} ${period}`;
 }
+
+export function formatDateTimeForFlightDate(isoString: string, flightDate?: string): string {
+	const timeMatch = isoString.match(/T(\d{2}):(\d{2})/);
+	if (!timeMatch) return "---";
+
+	const displayDate = flightDate ?? isoString.split("T")[0];
+	if (!displayDate) return "---";
+
+	const [_year, month, day] = displayDate.split("-");
+	if (!month || !day) return "---";
+
+	const months = [
+		"Jan",
+		"Feb",
+		"Mar",
+		"Apr",
+		"May",
+		"Jun",
+		"Jul",
+		"Aug",
+		"Sep",
+		"Oct",
+		"Nov",
+		"Dec",
+	];
+
+	const hours = parseInt(timeMatch[1], 10);
+	const minutes = timeMatch[2];
+	const period = hours >= 12 ? "PM" : "AM";
+	const displayHours = hours % 12 || 12;
+
+	return `${months[parseInt(month, 10) - 1]} ${parseInt(day, 10)}, ${displayHours}:${minutes} ${period}`;
+}
