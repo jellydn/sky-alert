@@ -79,6 +79,58 @@ interface FlightQueryOptions {
 	bypassCache?: boolean;
 }
 
+function formatDateInTimeZone(isoString: string, timezone?: string): string | null {
+	const date = new Date(isoString);
+	if (Number.isNaN(date.getTime())) {
+		return null;
+	}
+
+	if (!timezone) {
+		return isoString.split("T")[0] ?? null;
+	}
+
+	try {
+		const formatter = new Intl.DateTimeFormat("en-US", {
+			timeZone: timezone,
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+		});
+		const parts = formatter.formatToParts(date);
+		const year = parts.find((part) => part.type === "year")?.value;
+		const month = parts.find((part) => part.type === "month")?.value;
+		const day = parts.find((part) => part.type === "day")?.value;
+
+		if (!year || !month || !day) {
+			return null;
+		}
+
+		return `${year}-${month}-${day}`;
+	} catch {
+		return isoString.split("T")[0] ?? null;
+	}
+}
+
+export function flightMatchesRequestedDate(
+	flight: AviationstackFlight,
+	requestedDate: string,
+): boolean {
+	if (flight.flight_date === requestedDate) {
+		return true;
+	}
+
+	const departureLocalDate = formatDateInTimeZone(
+		flight.departure.scheduled,
+		flight.departure.timezone,
+	);
+	if (departureLocalDate === requestedDate) {
+		return true;
+	}
+
+	const arrivalLocalDate = formatDateInTimeZone(flight.arrival.scheduled, flight.arrival.timezone);
+	return arrivalLocalDate === requestedDate;
+}
+
 export class AviationstackAPI {
 	private apiKey: string;
 	private cache = new Map<string, CacheEntry<unknown>>();
@@ -158,7 +210,7 @@ export class AviationstackAPI {
 		url.searchParams.append("flight_iata", flightNumber);
 
 		const data = await this.fetchWithBudget(url);
-		const matching = data.data.filter((f) => f.flight_date === date);
+		const matching = data.data.filter((f) => flightMatchesRequestedDate(f, date));
 		this.setCache(cacheKey, matching);
 		return matching;
 	}
@@ -181,7 +233,7 @@ export class AviationstackAPI {
 		url.searchParams.append("arr_iata", destination);
 
 		const data = await this.fetchWithBudget(url);
-		const matching = data.data.filter((f) => f.flight_date === date);
+		const matching = data.data.filter((f) => flightMatchesRequestedDate(f, date));
 		this.setCache(cacheKey, matching);
 		return matching;
 	}
