@@ -63,7 +63,7 @@ bot.on("message:text", async (ctx: Context) => {
 
 			await ctx.reply(flightList, { parse_mode: "Markdown" });
 
-			setPendingSelection(chatId, limitedFlights);
+			setPendingSelection(chatId, limitedFlights, date);
 		} catch (error) {
 			logger.error("Error looking up flights:", error);
 			await handleApiError(ctx, error);
@@ -96,7 +96,7 @@ bot.on("message:text", async (ctx: Context) => {
 			clearPendingSelection(chatId);
 
 			try {
-				await saveAndConfirmFlight(ctx, chatId, selectedFlight);
+				await saveAndConfirmFlight(ctx, chatId, selectedFlight, pendingSelection.requestedDate);
 			} catch (error) {
 				logger.error("Error tracking flight:", error);
 				await handleApiError(ctx, error);
@@ -131,11 +131,11 @@ bot.on("message:text", async (ctx: Context) => {
 				const limitedFlights = apiFlights.slice(0, 5);
 				const message = formatFlightListMessage(limitedFlights, parsed.flightNumber);
 				await ctx.reply(message, { parse_mode: "Markdown" });
-				setPendingSelection(chatId, limitedFlights);
+				setPendingSelection(chatId, limitedFlights, parsed.date);
 				return;
 			}
 
-			await saveAndConfirmFlight(ctx, chatId, apiFlights[0]);
+			await saveAndConfirmFlight(ctx, chatId, apiFlights[0], parsed.date);
 		} catch (error) {
 			logger.error("Error tracking flight:", error);
 			await handleApiError(ctx, error);

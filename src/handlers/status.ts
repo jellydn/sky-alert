@@ -10,10 +10,12 @@ import { getFlightAwareFallback } from "../services/flightaware-fallback.js";
 import { getFlightStatsFallback } from "../services/flightstats-fallback.js";
 import {
 	isTerminalFlightStatus,
+	normalizeOperationalStatus,
 	preferKnownStatus,
+	shouldUseDepartureStandInfo,
 	shouldUseStatusFallback,
 } from "../utils/flight-status.js";
-import { formatDateTime } from "../utils/format-time.js";
+import { formatDateTime, formatDateTimeForFlightDate } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
 
 const STALE_THRESHOLD = 15 * 60 * 1000; // 15 minutes
@@ -113,10 +115,21 @@ bot.command("status", async (ctx: Context) => {
 					let nextDelayMinutes = getDelayMinutes(apiFlight);
 					let newStatus = preferKnownStatus(
 						flight.currentStatus || undefined,
-						apiFlight.flight_status,
+						normalizeOperationalStatus(
+							apiFlight.flight_status,
+							apiFlight.departure.scheduled,
+							flight.flightDate,
+						),
 					);
-					let nextGate = apiFlight.departure.gate || undefined;
-					let nextTerminal = apiFlight.departure.terminal || undefined;
+					const shouldIncludeStandInfo = shouldUseDepartureStandInfo(
+						apiFlight.departure.scheduled,
+						flight.flightDate,
+						newStatus,
+					);
+					let nextGate = shouldIncludeStandInfo ? apiFlight.departure.gate || undefined : undefined;
+					let nextTerminal = shouldIncludeStandInfo
+						? apiFlight.departure.terminal || undefined
+						: undefined;
 					let flightStatsFallbackUsed = false;
 
 					if (shouldUseStatusFallback(newStatus, nextDelayMinutes)) {
@@ -138,12 +151,19 @@ bot.command("status", async (ctx: Context) => {
 								flightStatsFallback.status &&
 								shouldUseStatusFallback(newStatus, nextDelayMinutes)
 							) {
-								newStatus = preferKnownStatus(newStatus, flightStatsFallback.status);
+								newStatus = preferKnownStatus(
+									newStatus,
+									normalizeOperationalStatus(
+										flightStatsFallback.status,
+										flight.scheduledDeparture,
+										flight.flightDate,
+									),
+								);
 							}
-							if (flightStatsFallback.departureGate) {
+							if (shouldIncludeStandInfo && flightStatsFallback.departureGate) {
 								nextGate = flightStatsFallback.departureGate;
 							}
-							if (flightStatsFallback.departureTerminal) {
+							if (shouldIncludeStandInfo && flightStatsFallback.departureTerminal) {
 								nextTerminal = flightStatsFallback.departureTerminal;
 							}
 							liveEstimatedDeparture = flightStatsFallback.estimatedDeparture;
@@ -162,7 +182,14 @@ bot.command("status", async (ctx: Context) => {
 								nextDelayMinutes = fallback.delayMinutes;
 							}
 							if (fallback?.status && shouldUseStatusFallback(newStatus, nextDelayMinutes)) {
-								newStatus = preferKnownStatus(newStatus, fallback.status);
+								newStatus = preferKnownStatus(
+									newStatus,
+									normalizeOperationalStatus(
+										fallback.status,
+										flight.scheduledDeparture,
+										flight.flightDate,
+									),
+								);
 							}
 						}
 					}
@@ -208,6 +235,11 @@ bot.command("status", async (ctx: Context) => {
 		const shouldEnrichFromFallback = !isTerminalFlightStatus(
 			flight.currentStatus || displayStatus || undefined,
 		);
+		const shouldIncludeStandInfo = shouldUseDepartureStandInfo(
+			flight.scheduledDeparture,
+			flight.flightDate,
+			displayStatus,
+		);
 		if (shouldEnrichFromFallback) {
 			const parsedCode = parseCarrierAndNumber(flight.flightNumber);
 			if (parsedCode.carrier && parsedCode.number) {
@@ -217,15 +249,23 @@ bot.command("status", async (ctx: Context) => {
 						parsedCode.number,
 					);
 					if (flightStatsFallback?.status) {
-						displayStatus = preferKnownStatus(displayStatus, flightStatsFallback.status) || "";
+						displayStatus =
+							preferKnownStatus(
+								displayStatus,
+								normalizeOperationalStatus(
+									flightStatsFallback.status,
+									flight.scheduledDeparture,
+									flight.flightDate,
+								),
+							) || "";
 					}
 					if (flightStatsFallback?.delayMinutes && flightStatsFallback.delayMinutes > 0) {
 						displayDelayMinutes = flightStatsFallback.delayMinutes;
 					}
-					if (flightStatsFallback?.departureGate) {
+					if (shouldIncludeStandInfo && flightStatsFallback?.departureGate) {
 						displayDepartureGate = flightStatsFallback.departureGate;
 					}
-					if (flightStatsFallback?.departureTerminal) {
+					if (shouldIncludeStandInfo && flightStatsFallback?.departureTerminal) {
 						displayDepartureTerminal = flightStatsFallback.departureTerminal;
 					}
 					if (flightStatsFallback?.estimatedDeparture) {
@@ -286,7 +326,10 @@ bot.command("status", async (ctx: Context) => {
 		message += `📅 ${flight.flightDate}\n\n`;
 
 		message += "*Departure:*\n";
-		message += `   Scheduled: ${formatDateTime(flight.scheduledDeparture)} (${flight.origin})\n`;
+		message += `   Scheduled: ${formatDateTimeForFlightDate(
+			flight.scheduledDeparture,
+			flight.flightDate,
+		)} (${flight.origin})\n`;
 		if (liveEstimatedDeparture) {
 			message += `   Estimated: ${formatDateTime(liveEstimatedDeparture)} (${flight.origin})\n`;
 		} else if (displayDelayMinutes && displayDelayMinutes > 0) {
@@ -308,6 +351,10 @@ bot.command("status", async (ctx: Context) => {
 			message += `   🏢 Terminal: ${displayDepartureTerminal}\n`;
 		}
 
+		if (!displayDepartureGate && !displayDepartureTerminal && displayStatus === "scheduled") {
+			message += "   ℹ️ Gate/terminal not available yet\n";
+		}
+
 		if (displayDelayMinutes && displayDelayMinutes > 0) {
 			message += `   ⏱️ Delay: ${displayDelayMinutes} min\n`;
 		}
@@ -315,7 +362,10 @@ bot.command("status", async (ctx: Context) => {
 		message += "\n";
 
 		message += "*Arrival:*\n";
-		message += `   Scheduled: ${formatDateTime(flight.scheduledArrival)} (${flight.destination})\n`;
+		message += `   Scheduled: ${formatDateTimeForFlightDate(
+			flight.scheduledArrival,
+			flight.flightDate,
+		)} (${flight.destination})\n`;
 		if (liveEstimatedArrival) {
 			message += `   Estimated: ${formatDateTime(liveEstimatedArrival)} (${flight.destination})\n`;
 		} else if (displayDelayMinutes && displayDelayMinutes > 0) {
@@ -332,10 +382,19 @@ bot.command("status", async (ctx: Context) => {
 		}
 		message += "\n";
 
-		if (changes.length > 0) {
+		const displayChanges = changes.filter((change) => {
+			const normalizedNewStatus = normalizeOperationalStatus(
+				change.newStatus,
+				flight.scheduledDeparture,
+				flight.flightDate,
+			);
+			return normalizedNewStatus && normalizedNewStatus === change.newStatus;
+		});
+
+		if (displayChanges.length > 0) {
 			message += "*Recent Status Changes:*\n";
-			for (let i = 0; i < changes.length; i++) {
-				const change = changes[i];
+			for (let i = 0; i < displayChanges.length; i++) {
+				const change = displayChanges[i];
 				const detectedTime = new Date(change.detectedAt);
 				const timeStr = detectedTime.toLocaleTimeString("en-US", {
 					hour: "2-digit",

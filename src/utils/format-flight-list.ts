@@ -1,4 +1,5 @@
 import type { AviationstackFlight } from "../services/aviationstack.js";
+import { normalizeOperationalStatus } from "./flight-status.js";
 import { formatTime } from "./format-time.js";
 
 export function formatFlightListMessage(
@@ -20,7 +21,7 @@ export function formatFlightListMessage(
 			message += `${i + 1}. ${f.departure.iata} → ${f.arrival.iata}\n`;
 			message += `   🛫 ${timeStr}`;
 			if (f.departure.terminal) message += ` Terminal ${f.departure.terminal}`;
-			message += `\n   📊 ${f.flight_status}\n\n`;
+			message += `\n   📊 ${normalizeOperationalStatus(f.flight_status, f.departure.scheduled) || "unknown"}\n\n`;
 		} else {
 			message += `${i + 1}. *${f.flight.iata}*\n`;
 			message += `   ${f.airline.name}\n`;

@@ -7,9 +7,11 @@ import {
 	createFlight,
 	getFlightByNumberAndDate,
 	trackFlight,
+	updateFlightById,
 } from "../services/flight-service.js";
 import { handleApiError } from "../utils/api-error-handler.js";
 import { parseDate } from "../utils/flight-parser.js";
+import { normalizeOperationalStatus } from "../utils/flight-status.js";
 import { formatFlightListMessage } from "../utils/format-flight-list.js";
 import { formatTime } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
@@ -60,11 +62,11 @@ bot.command("track", async (ctx: Context) => {
 			const message = formatFlightListMessage(limitedFlights, flightNumber);
 
 			await ctx.reply(message, { parse_mode: "Markdown" });
-			setPendingSelection(chatId, limitedFlights);
+			setPendingSelection(chatId, limitedFlights, date);
 			return;
 		}
 
-		await saveAndConfirmFlight(ctx, chatId, apiFlights[0]);
+		await saveAndConfirmFlight(ctx, chatId, apiFlights[0], date);
 	} catch (error) {
 		logger.error("Error tracking flight:", error);
 		await handleApiError(ctx, error);
@@ -75,8 +77,9 @@ export async function saveAndConfirmFlight(
 	ctx: Context,
 	chatId: string,
 	apiFlight: AviationstackFlight,
+	requestedDate?: string,
 ): Promise<void> {
-	const flightInput = convertAviationstackFlight(apiFlight);
+	const flightInput = convertAviationstackFlight(apiFlight, requestedDate);
 
 	const existingFlight = await getFlightByNumberAndDate(
 		flightInput.flightNumber,
@@ -87,6 +90,7 @@ export async function saveAndConfirmFlight(
 
 	if (existingFlight) {
 		flightId = existingFlight.id;
+		await updateFlightById(flightId, flightInput);
 	} else {
 		const createdId = await createFlight(flightInput);
 		if (!createdId) {
@@ -96,9 +100,8 @@ export async function saveAndConfirmFlight(
 		flightId = createdId;
 	}
 
-	const alreadyTracking = await trackFlight(chatId, flightId);
-
-	const trackingNote = alreadyTracking ? "ℹ️ You were already tracking this flight.\n\n" : "";
+	const insertedTracking = await trackFlight(chatId, flightId);
+	const trackingNote = insertedTracking ? "" : "ℹ️ You were already tracking this flight.\n\n";
 
 	await ctx.reply(
 		`${trackingNote}✅ *Flight Tracked Successfully*\n\n` +
@@ -108,9 +111,15 @@ export async function saveAndConfirmFlight(
 			`📅 Date: ${flightInput.flightDate}\n\n` +
 			`🛫 Departure: ${formatTime(apiFlight.departure.scheduled)} (${flightInput.origin})\n` +
 			`🛬 Arrival: ${formatTime(apiFlight.arrival.scheduled)} (${flightInput.destination})\n\n` +
-			`📊 Status: ${apiFlight.flight_status}\n` +
-			`${apiFlight.departure.gate ? `🚪 Gate: ${apiFlight.departure.gate}\n` : ""}` +
-			`${apiFlight.departure.terminal ? `🏢 Terminal: ${apiFlight.departure.terminal}\n` : ""}`,
+			`📊 Status: ${
+				normalizeOperationalStatus(
+					apiFlight.flight_status,
+					apiFlight.departure.scheduled,
+					flightInput.flightDate,
+				) || "unknown"
+			}\n` +
+			`${flightInput.gate ? `🚪 Gate: ${flightInput.gate}\n` : ""}` +
+			`${flightInput.terminal ? `🏢 Terminal: ${flightInput.terminal}\n` : ""}`,
 		{ parse_mode: "Markdown" },
 	);
 }

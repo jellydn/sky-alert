@@ -3,6 +3,7 @@ import type { Context } from "grammy";
 import { bot } from "../bot/instance.js";
 import { db } from "../db/index.js";
 import { flights, trackedFlights } from "../db/schema.js";
+import { shouldUseDepartureStandInfo } from "../utils/flight-status.js";
 import { formatTime } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
 
@@ -24,6 +25,8 @@ bot.command("flights", async (ctx: Context) => {
 				destination: flights.destination,
 				scheduledDeparture: flights.scheduledDeparture,
 				currentStatus: flights.currentStatus,
+				gate: flights.gate,
+				terminal: flights.terminal,
 			})
 			.from(trackedFlights)
 			.innerJoin(flights, eq(trackedFlights.flightId, flights.id))
@@ -54,6 +57,17 @@ bot.command("flights", async (ctx: Context) => {
 			message += `   🛫 ${formatTime(flight.scheduledDeparture)} (${flight.origin})\n`;
 			if (flight.currentStatus) {
 				message += `   📊 ${flight.currentStatus}\n`;
+			}
+			const shouldShowStandInfo = shouldUseDepartureStandInfo(
+				flight.scheduledDeparture,
+				flight.flightDate,
+				flight.currentStatus || undefined,
+			);
+			if (shouldShowStandInfo && flight.gate) {
+				message += `   🚪 ${flight.gate}\n`;
+			}
+			if (shouldShowStandInfo && flight.terminal) {
+				message += `   🏢 ${flight.terminal}\n`;
 			}
 			message += "\n";
 		}
