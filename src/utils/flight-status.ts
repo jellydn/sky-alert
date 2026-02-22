@@ -27,6 +27,7 @@ export function normalizeOperationalStatus(
 	scheduledDepartureIso?: string,
 	flightDate?: string,
 	nowMs = Date.now(),
+	sourceFlightDate?: string,
 ): string | undefined {
 	const normalized = normalizeFlightStatus(status);
 	if (!normalized) {
@@ -34,6 +35,23 @@ export function normalizeOperationalStatus(
 	}
 
 	const progressLikeStatuses = new Set(["active", "departed", "landed", "arrived", "completed"]);
+	const scheduledSourceDate = scheduledDepartureIso?.split("T")[0];
+	if (
+		scheduledSourceDate &&
+		flightDate &&
+		scheduledSourceDate < flightDate &&
+		progressLikeStatuses.has(normalized)
+	) {
+		return "scheduled";
+	}
+	if (
+		sourceFlightDate &&
+		flightDate &&
+		sourceFlightDate < flightDate &&
+		progressLikeStatuses.has(normalized)
+	) {
+		return "scheduled";
+	}
 
 	if (flightDate) {
 		const now = new Date(nowMs);

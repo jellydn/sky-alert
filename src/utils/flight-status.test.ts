@@ -54,6 +54,26 @@ describe("flight-status utilities", () => {
 		).toBe("scheduled");
 	});
 
+	test("normalizeOperationalStatus maps progress status to scheduled when source flight date lags", () => {
+		const nowMs = Date.parse("2026-02-22T10:00:00Z");
+		expect(
+			normalizeOperationalStatus(
+				"landed",
+				"2026-02-22T19:55:00+00:00",
+				"2026-02-22",
+				nowMs,
+				"2026-02-21",
+			),
+		).toBe("scheduled");
+	});
+
+	test("normalizeOperationalStatus maps progress status to scheduled when scheduled timestamp date lags", () => {
+		const nowMs = Date.parse("2026-02-22T10:00:00Z");
+		expect(
+			normalizeOperationalStatus("arrived", "2026-02-21T19:55:00+00:00", "2026-02-22", nowMs),
+		).toBe("scheduled");
+	});
+
 	test("shouldUseDepartureStandInfo is false for far future departures", () => {
 		const nowMs = Date.parse("2026-02-21T00:00:00Z");
 		expect(
