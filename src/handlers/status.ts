@@ -451,7 +451,38 @@ bot.command("status", async (ctx: Context) => {
 			flight.scheduledDeparture,
 			flight.flightDate,
 		);
-		if (finalDisplayStatus && finalDisplayStatus !== (flight.currentStatus || undefined)) {
+		const shouldPersistFallbackSnapshot = refreshSkippedForBudget && budgetFallbackUsed;
+		if (shouldPersistFallbackSnapshot) {
+			const persistedStatus = finalDisplayStatus || flight.currentStatus || undefined;
+			const hasStatusChange =
+				persistedStatus && persistedStatus !== (flight.currentStatus || undefined);
+			if (hasStatusChange && persistedStatus) {
+				await db.insert(statusChanges).values({
+					flightId: flight.id,
+					oldStatus: flight.currentStatus,
+					newStatus: persistedStatus,
+				});
+			}
+
+			await db
+				.update(flights)
+				.set({
+					currentStatus: persistedStatus,
+					isActive: !isTerminalFlightStatus(persistedStatus),
+					delayMinutes: displayDelayMinutes ?? null,
+					gate: displayDepartureGate ?? null,
+					terminal: displayDepartureTerminal ?? null,
+					lastPolledAt: Math.floor(Date.now() / 1000),
+				})
+				.where(eq(flights.id, flight.id));
+
+			const updated = await db.query.flights.findFirst({
+				where: eq(flights.id, flight.id),
+			});
+			if (updated) {
+				flight = updated;
+			}
+		} else if (finalDisplayStatus && finalDisplayStatus !== (flight.currentStatus || undefined)) {
 			await db.insert(statusChanges).values({
 				flightId: flight.id,
 				oldStatus: flight.currentStatus,
