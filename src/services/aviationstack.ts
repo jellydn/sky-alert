@@ -77,6 +77,7 @@ interface CacheEntry<T> {
 
 interface FlightQueryOptions {
 	bypassCache?: boolean;
+	allowReserve?: boolean;
 }
 
 function formatDateInTimeZone(isoString: string, timezone?: string): string | null {
@@ -166,12 +167,15 @@ export class AviationstackAPI {
 		this.cache.set(key, { data, timestamp: Date.now() });
 	}
 
-	private async fetchWithBudget(url: URL): Promise<AviationstackResponse> {
+	private async fetchWithBudget(
+		url: URL,
+		options?: FlightQueryOptions,
+	): Promise<AviationstackResponse> {
 		const { canMakeRequest, markUsageLimitReached, recordRequest } = await import(
 			"./api-budget.js"
 		);
 
-		if (!(await canMakeRequest())) {
+		if (!(await canMakeRequest({ allowReserve: options?.allowReserve }))) {
 			throw new Error("Monthly API budget exceeded");
 		}
 
@@ -212,7 +216,7 @@ export class AviationstackAPI {
 		url.searchParams.append("access_key", this.apiKey);
 		url.searchParams.append("flight_iata", flightNumber);
 
-		const data = await this.fetchWithBudget(url);
+		const data = await this.fetchWithBudget(url, options);
 		const matching = data.data.filter((f) => flightMatchesRequestedDate(f, date));
 		this.setCache(cacheKey, matching);
 		return matching;
@@ -235,7 +239,7 @@ export class AviationstackAPI {
 		url.searchParams.append("dep_iata", origin);
 		url.searchParams.append("arr_iata", destination);
 
-		const data = await this.fetchWithBudget(url);
+		const data = await this.fetchWithBudget(url, options);
 		const matching = data.data.filter((f) => flightMatchesRequestedDate(f, date));
 		this.setCache(cacheKey, matching);
 		return matching;

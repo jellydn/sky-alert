@@ -38,6 +38,19 @@ function parseCarrierAndNumber(flightCode: string): { carrier?: string; number?:
 	return { carrier: match[1], number: match[2] };
 }
 
+function buildFlightAwareCandidates(flightNumber: string): string[] {
+	const normalized = flightNumber.replace(/\s+/g, "").toUpperCase();
+	const parsed = parseCarrierAndNumber(normalized);
+	const candidates = new Set<string>([normalized]);
+
+	// Heuristic: some airlines are tracked by 3-letter ICAO IDs (e.g. VJ890 -> VJC890).
+	if (parsed.carrier && parsed.number && parsed.carrier.length === 2) {
+		candidates.add(`${parsed.carrier}C${parsed.number}`);
+	}
+
+	return Array.from(candidates);
+}
+
 bot.command("status", async (ctx: Context) => {
 	const args = ctx.match?.toString().trim();
 
@@ -61,6 +74,8 @@ bot.command("status", async (ctx: Context) => {
 
 	try {
 		let refreshFailed = false;
+		let refreshSkippedForBudget = false;
+		let budgetFallbackUsed = false;
 		let liveEstimatedDeparture: string | undefined;
 		let liveEstimatedArrival: string | undefined;
 		let liveArrivalGate: string | undefined;
@@ -97,15 +112,16 @@ bot.command("status", async (ctx: Context) => {
 			flight.currentStatus || "",
 			flight.delayMinutes || undefined,
 		);
-		const canRefresh = await canMakeRequest();
+		const canRefresh = await canMakeRequest({ allowReserve: true });
 		const shouldRefresh = isFlightActive && canRefresh && (isStale || hasLowSignalStatus);
+		refreshSkippedForBudget = isFlightActive && !canRefresh && (isStale || hasLowSignalStatus);
 
 		if (shouldRefresh) {
 			try {
 				const apiFlights = await aviationstackApi.getFlightsByNumber(
 					flight.flightNumber,
 					flight.flightDate,
-					{ bypassCache: true },
+					{ allowReserve: true, bypassCache: true },
 				);
 				if (apiFlights.length > 0) {
 					const apiFlight = selectBestMatchingFlight(apiFlights, flight.origin, flight.destination);
@@ -292,9 +308,49 @@ bot.command("status", async (ctx: Context) => {
 					if (flightStatsFallback?.arrivalTerminal) {
 						liveArrivalTerminal = flightStatsFallback.arrivalTerminal;
 					}
+					if (
+						refreshSkippedForBudget &&
+						(flightStatsFallback?.status ||
+							(flightStatsFallback?.delayMinutes && flightStatsFallback.delayMinutes > 0) ||
+							flightStatsFallback?.estimatedDeparture ||
+							flightStatsFallback?.estimatedArrival ||
+							flightStatsFallback?.departureGate ||
+							flightStatsFallback?.departureTerminal ||
+							flightStatsFallback?.arrivalGate ||
+							flightStatsFallback?.arrivalTerminal)
+					) {
+						budgetFallbackUsed = true;
+					}
 				} catch (error) {
 					logger.debug(`FlightStats display enrichment failed for ${flight.flightNumber}:`, error);
 				}
+			}
+		}
+		if (refreshSkippedForBudget && shouldUseStatusFallback(displayStatus, displayDelayMinutes)) {
+			try {
+				const fallback = await getFlightAwareFallback(
+					buildFlightAwareCandidates(flight.flightNumber),
+					flight.origin,
+					flight.destination,
+				);
+				if (fallback?.delayMinutes && fallback.delayMinutes > 0) {
+					displayDelayMinutes = fallback.delayMinutes;
+					budgetFallbackUsed = true;
+				}
+				if (fallback?.status) {
+					displayStatus =
+						preferKnownStatus(
+							displayStatus,
+							normalizeOperationalStatus(
+								fallback.status,
+								flight.scheduledDeparture,
+								flight.flightDate,
+							),
+						) || "";
+					budgetFallbackUsed = true;
+				}
+			} catch (error) {
+				logger.debug(`FlightAware display enrichment failed for ${flight.flightNumber}:`, error);
 			}
 		}
 
@@ -426,12 +482,22 @@ bot.command("status", async (ctx: Context) => {
 			}
 		}
 
-		if (flight.lastPolledAt) {
+		if (refreshSkippedForBudget && budgetFallbackUsed) {
+			message += "\n_Updated just now via web fallback_";
+		} else if (flight.lastPolledAt) {
 			const ago = Math.round((Date.now() - flight.lastPolledAt * 1000) / 60000);
 			message += `\n_Updated ${ago} min ago_`;
 		}
 		if (refreshFailed) {
 			message += "\n_⚠️ Could not refresh live status. Showing latest cached data._";
+		}
+		if (refreshSkippedForBudget) {
+			if (budgetFallbackUsed) {
+				message +=
+					"\n_⚠️ Live Aviationstack refresh skipped: monthly budget reached. Showing web fallback data._";
+			} else {
+				message += "\n_⚠️ Live refresh skipped: monthly API budget reached. Showing cached data._";
+			}
 		}
 
 		await ctx.reply(message, { parse_mode: "Markdown" });
