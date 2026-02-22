@@ -124,6 +124,8 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 				apiFlight.flight_status,
 				apiFlight.departure.scheduled,
 				flight.flightDate,
+				Date.now(),
+				apiFlight.flight_date,
 			),
 		);
 		const shouldIncludeStandInfo = shouldUseDepartureStandInfo(
@@ -192,20 +194,25 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 		}
 
 		const finalStatus = preferKnownStatus(flight.currentStatus || undefined, nextStatus);
-		const isTerminalStatus = isTerminalFlightStatus(finalStatus);
+		const normalizedFinalStatus = normalizeOperationalStatus(
+			finalStatus,
+			flight.scheduledDeparture,
+			flight.flightDate,
+		);
+		const isTerminalStatus = isTerminalFlightStatus(normalizedFinalStatus);
 
 		const changes: { field: string; from: string; to: string }[] = [];
 
-		if (flight.currentStatus !== finalStatus && finalStatus) {
+		if (flight.currentStatus !== normalizedFinalStatus && normalizedFinalStatus) {
 			changes.push({
 				field: "Status",
 				from: flight.currentStatus || "N/A",
-				to: finalStatus,
+				to: normalizedFinalStatus,
 			});
 			await db.insert(statusChanges).values({
 				flightId,
 				oldStatus: flight.currentStatus,
-				newStatus: finalStatus,
+				newStatus: normalizedFinalStatus,
 			});
 		}
 
@@ -258,7 +265,7 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 		await db
 			.update(flights)
 			.set({
-				currentStatus: finalStatus,
+				currentStatus: normalizedFinalStatus,
 				gate: nextGate,
 				terminal: nextTerminal,
 				delayMinutes: nextDelayMinutes,

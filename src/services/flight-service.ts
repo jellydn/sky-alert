@@ -107,6 +107,8 @@ export function convertAviationstackFlight(
 		apiFlight.flight_status,
 		apiFlight.departure.scheduled,
 		flightDate,
+		Date.now(),
+		apiFlight.flight_date,
 	);
 	const shouldIncludeStandInfo = shouldUseDepartureStandInfo(
 		apiFlight.departure.scheduled,
