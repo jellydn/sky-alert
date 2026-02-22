@@ -102,6 +102,16 @@ describe("flight-status utilities", () => {
 		).toBe(false);
 	});
 
+	test("shouldUseDepartureStandInfo is true when scheduledDepartureIso is undefined", () => {
+		const nowMs = Date.parse("2026-02-22T10:00:00Z");
+		expect(shouldUseDepartureStandInfo(undefined, "2026-02-22", undefined, nowMs)).toBe(true);
+	});
+
+	test("shouldUseDepartureStandInfo is true when scheduledDepartureIso is invalid", () => {
+		const nowMs = Date.parse("2026-02-22T10:00:00Z");
+		expect(shouldUseDepartureStandInfo("invalid-date", "2026-02-22", undefined, nowMs)).toBe(true);
+	});
+
 	test("isLowSignalStatus treats unknown as low-signal", () => {
 		expect(isLowSignalStatus("unknown")).toBe(true);
 	});

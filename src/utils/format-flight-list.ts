@@ -21,7 +21,10 @@ export function formatFlightListMessage(
 			message += `${i + 1}. ${f.departure.iata} → ${f.arrival.iata}\n`;
 			message += `   🛫 ${timeStr}`;
 			if (f.departure.terminal) message += ` Terminal ${f.departure.terminal}`;
-			message += `\n   📊 ${normalizeOperationalStatus(f.flight_status, f.departure.scheduled) || "unknown"}\n\n`;
+			message += `\n   📊 ${
+				normalizeOperationalStatus(f.flight_status, f.departure.scheduled, f.flight_date) ||
+				"unknown"
+			}\n\n`;
 		} else {
 			message += `${i + 1}. *${f.flight.iata}*\n`;
 			message += `   ${f.airline.name}\n`;

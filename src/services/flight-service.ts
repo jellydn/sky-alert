@@ -1,7 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { flights, trackedFlights } from "../db/schema.js";
-import { normalizeOperationalStatus, shouldUseDepartureStandInfo } from "../utils/flight-status.js";
+import {
+	isTerminalFlightStatus,
+	normalizeOperationalStatus,
+	shouldUseDepartureStandInfo,
+} from "../utils/flight-status.js";
 import type { AviationstackFlight } from "./aviationstack.js";
 
 export interface FlightInput {
@@ -50,6 +54,8 @@ export async function getFlightByNumberAndDate(flightNumber: string, flightDate:
 }
 
 export async function updateFlightById(flightId: number, input: FlightInput): Promise<void> {
+	const isActive = !isTerminalFlightStatus(input.currentStatus);
+
 	await db
 		.update(flights)
 		.set({
@@ -63,7 +69,7 @@ export async function updateFlightById(flightId: number, input: FlightInput): Pr
 			gate: input.gate,
 			terminal: input.terminal,
 			delayMinutes: input.delayMinutes,
-			isActive: true,
+			isActive,
 		})
 		.where(eq(flights.id, flightId));
 }

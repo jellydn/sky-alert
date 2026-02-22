@@ -51,4 +51,9 @@ describe("formatDateTimeForFlightDate", () => {
 	test("should fallback to iso date when flight date is missing", () => {
 		expect(formatDateTimeForFlightDate("2026-02-21T19:55:00+00:00")).toBe("Feb 21, 7:55 PM");
 	});
+
+	test("should return --- when iso string has no time component", () => {
+		expect(formatDateTimeForFlightDate("2026-02-21")).toBe("---");
+		expect(formatDateTimeForFlightDate("2026-02-21", "2026-02-22")).toBe("---");
+	});
 });

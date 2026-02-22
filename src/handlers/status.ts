@@ -112,6 +112,7 @@ bot.command("status", async (ctx: Context) => {
 					if (!apiFlight) {
 						throw new Error("No matching API flight found");
 					}
+					const nowMs = Date.now();
 					let nextDelayMinutes = getDelayMinutes(apiFlight);
 					let newStatus = preferKnownStatus(
 						flight.currentStatus || undefined,
@@ -119,7 +120,7 @@ bot.command("status", async (ctx: Context) => {
 							apiFlight.flight_status,
 							apiFlight.departure.scheduled,
 							flight.flightDate,
-							Date.now(),
+							nowMs,
 							apiFlight.flight_date,
 						),
 					);
@@ -127,11 +128,15 @@ bot.command("status", async (ctx: Context) => {
 						apiFlight.departure.scheduled,
 						flight.flightDate,
 						newStatus,
+						nowMs,
 					);
-					let nextGate = shouldIncludeStandInfo ? apiFlight.departure.gate || undefined : undefined;
+					let nextGate = flight.gate || undefined;
 					let nextTerminal = shouldIncludeStandInfo
 						? apiFlight.departure.terminal || undefined
-						: undefined;
+						: flight.terminal || undefined;
+					if (shouldIncludeStandInfo && apiFlight.departure.gate) {
+						nextGate = apiFlight.departure.gate;
+					}
 					let flightStatsFallbackUsed = false;
 
 					if (shouldUseStatusFallback(newStatus, nextDelayMinutes)) {
@@ -241,7 +246,7 @@ bot.command("status", async (ctx: Context) => {
 		const shouldEnrichFromFallback = !isTerminalFlightStatus(
 			flight.currentStatus || displayStatus || undefined,
 		);
-		const shouldIncludeStandInfo = shouldUseDepartureStandInfo(
+		const shouldIncludeStandInfoFallback = shouldUseDepartureStandInfo(
 			flight.scheduledDeparture,
 			flight.flightDate,
 			displayStatus,
@@ -268,10 +273,10 @@ bot.command("status", async (ctx: Context) => {
 					if (flightStatsFallback?.delayMinutes && flightStatsFallback.delayMinutes > 0) {
 						displayDelayMinutes = flightStatsFallback.delayMinutes;
 					}
-					if (shouldIncludeStandInfo && flightStatsFallback?.departureGate) {
+					if (shouldIncludeStandInfoFallback && flightStatsFallback?.departureGate) {
 						displayDepartureGate = flightStatsFallback.departureGate;
 					}
-					if (shouldIncludeStandInfo && flightStatsFallback?.departureTerminal) {
+					if (shouldIncludeStandInfoFallback && flightStatsFallback?.departureTerminal) {
 						displayDepartureTerminal = flightStatsFallback.departureTerminal;
 					}
 					if (flightStatsFallback?.estimatedDeparture) {

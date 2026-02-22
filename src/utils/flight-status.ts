@@ -1,5 +1,6 @@
 const LOW_SIGNAL_STATUSES = new Set(["scheduled", "unknown", "n/a", "na", "unavailable"]);
 const TERMINAL_STATUSES = new Set(["landed", "cancelled", "canceled", "arrived", "completed"]);
+const PROGRESS_LIKE_STATUSES = new Set(["active", "departed", "landed", "arrived", "completed"]);
 const GATE_INFO_WINDOW_MS = 6 * 60 * 60 * 1000;
 const STATUS_ALIASES: Record<string, string> = {
 	canceled: "cancelled",
@@ -33,14 +34,12 @@ export function normalizeOperationalStatus(
 	if (!normalized) {
 		return undefined;
 	}
-
-	const progressLikeStatuses = new Set(["active", "departed", "landed", "arrived", "completed"]);
 	const scheduledSourceDate = scheduledDepartureIso?.split("T")[0];
 	if (
 		scheduledSourceDate &&
 		flightDate &&
 		scheduledSourceDate < flightDate &&
-		progressLikeStatuses.has(normalized)
+		PROGRESS_LIKE_STATUSES.has(normalized)
 	) {
 		return "scheduled";
 	}
@@ -48,17 +47,14 @@ export function normalizeOperationalStatus(
 		sourceFlightDate &&
 		flightDate &&
 		sourceFlightDate < flightDate &&
-		progressLikeStatuses.has(normalized)
+		PROGRESS_LIKE_STATUSES.has(normalized)
 	) {
 		return "scheduled";
 	}
 
 	if (flightDate) {
-		const now = new Date(nowMs);
-		const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
-			now.getDate(),
-		).padStart(2, "0")}`;
-		if (flightDate > today && progressLikeStatuses.has(normalized)) {
+		const today = todayDateString(nowMs);
+		if (flightDate > today && PROGRESS_LIKE_STATUSES.has(normalized)) {
 			return "scheduled";
 		}
 	}
@@ -66,7 +62,7 @@ export function normalizeOperationalStatus(
 	if (scheduledDepartureIso) {
 		const departureMs = Date.parse(scheduledDepartureIso);
 		if (!Number.isNaN(departureMs) && departureMs > nowMs) {
-			if (progressLikeStatuses.has(normalized)) {
+			if (PROGRESS_LIKE_STATUSES.has(normalized)) {
 				return "scheduled";
 			}
 		}
@@ -87,10 +83,7 @@ export function shouldUseDepartureStandInfo(
 	}
 
 	if (flightDate) {
-		const now = new Date(nowMs);
-		const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
-			now.getDate(),
-		).padStart(2, "0")}`;
+		const today = todayDateString(nowMs);
 
 		// If user is tracking a future calendar day, gate/terminal is usually stale.
 		if (flightDate > today) {
@@ -108,6 +101,13 @@ export function shouldUseDepartureStandInfo(
 	}
 
 	return departureMs - nowMs <= GATE_INFO_WINDOW_MS;
+}
+
+function todayDateString(nowMs: number): string {
+	const now = new Date(nowMs);
+	return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(
+		now.getUTCDate(),
+	).padStart(2, "0")}`;
 }
 
 export function isLowSignalStatus(status?: string): boolean {

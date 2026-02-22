@@ -105,7 +105,7 @@ export async function saveAndConfirmFlight(
 	await ctx.reply(
 		`${trackingNote}✅ *Flight Tracked Successfully*\n\n` +
 			`✈️ ${flightInput.flightNumber}\n` +
-			`${apiFlight.airline.name}\n\n` +
+			`${apiFlight.airline?.name ?? "Unknown airline"}\n\n` +
 			`📍 Route: ${flightInput.origin} → ${flightInput.destination}\n` +
 			`📅 Date: ${flightInput.flightDate}\n\n` +
 			`🛫 Departure: ${formatTime(apiFlight.departure.scheduled)} (${flightInput.origin})\n` +
