@@ -239,7 +239,8 @@ bot.command("status", async (ctx: Context) => {
 				}
 			} catch (error) {
 				refreshFailed = true;
-				logger.warn(`Live refresh failed for ${flight.flightNumber}:`, error);
+				const reason = error instanceof Error ? error.message : String(error);
+				logger.warn(`Live refresh failed for ${flight.flightNumber}: ${reason}`);
 			}
 		}
 

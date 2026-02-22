@@ -167,7 +167,9 @@ export class AviationstackAPI {
 	}
 
 	private async fetchWithBudget(url: URL): Promise<AviationstackResponse> {
-		const { canMakeRequest, recordRequest } = await import("./api-budget.js");
+		const { canMakeRequest, markUsageLimitReached, recordRequest } = await import(
+			"./api-budget.js"
+		);
 
 		if (!(await canMakeRequest())) {
 			throw new Error("Monthly API budget exceeded");
@@ -181,7 +183,8 @@ export class AviationstackAPI {
 			const body = await response.text();
 			logger.error(`API error ${response.status}: ${body}`);
 			if (response.status === 429) {
-				throw new Error("Rate limit exceeded");
+				await markUsageLimitReached();
+				throw new Error("Monthly API budget exceeded");
 			}
 			if (response.status === 401) {
 				throw new Error("Invalid API key");

@@ -55,6 +55,18 @@ export async function recordRequest(): Promise<void> {
 		.where(eq(apiUsage.month, month));
 }
 
+export async function markUsageLimitReached(): Promise<void> {
+	const month = getCurrentMonth();
+	await getOrCreateMonthRecord();
+	await db
+		.update(apiUsage)
+		.set({
+			requestCount: FREE_TIER_LIMIT,
+			lastRequestAt: new Date(),
+		})
+		.where(eq(apiUsage.month, month));
+}
+
 export async function isPollingEnabled(): Promise<boolean> {
 	const { remaining } = await getUsage();
 	return remaining > FREE_TIER_LIMIT * 0.3;
