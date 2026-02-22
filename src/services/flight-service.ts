@@ -1,6 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { flights, trackedFlights } from "../db/schema.js";
+import {
+	isTerminalFlightStatus,
+	normalizeOperationalStatus,
+	shouldUseDepartureStandInfo,
+} from "../utils/flight-status.js";
 import type { AviationstackFlight } from "./aviationstack.js";
 
 export interface FlightInput {
@@ -48,6 +53,27 @@ export async function getFlightByNumberAndDate(flightNumber: string, flightDate:
 	});
 }
 
+export async function updateFlightById(flightId: number, input: FlightInput): Promise<void> {
+	const isActive = !isTerminalFlightStatus(input.currentStatus);
+
+	await db
+		.update(flights)
+		.set({
+			flightNumber: input.flightNumber,
+			flightDate: input.flightDate,
+			origin: input.origin,
+			destination: input.destination,
+			scheduledDeparture: input.scheduledDeparture,
+			scheduledArrival: input.scheduledArrival,
+			currentStatus: input.currentStatus,
+			gate: input.gate,
+			terminal: input.terminal,
+			delayMinutes: input.delayMinutes,
+			isActive,
+		})
+		.where(eq(flights.id, flightId));
+}
+
 export async function trackFlight(chatId: string, flightId: number) {
 	const result = await db
 		.insert(trackedFlights)
@@ -77,19 +103,35 @@ export async function untrackFlight(chatId: string, flightId: number) {
 	}
 }
 
-export function convertAviationstackFlight(apiFlight: AviationstackFlight): FlightInput {
+export function convertAviationstackFlight(
+	apiFlight: AviationstackFlight,
+	requestedDate?: string,
+): FlightInput {
 	const delayMinutes = getDelayMinutes(apiFlight);
+	const flightDate = requestedDate ?? apiFlight.flight_date;
+	const normalizedStatus = normalizeOperationalStatus(
+		apiFlight.flight_status,
+		apiFlight.departure.scheduled,
+		flightDate,
+		Date.now(),
+		apiFlight.flight_date,
+	);
+	const shouldIncludeStandInfo = shouldUseDepartureStandInfo(
+		apiFlight.departure.scheduled,
+		flightDate,
+		normalizedStatus,
+	);
 
 	return {
 		flightNumber: apiFlight.flight.iata,
-		flightDate: apiFlight.flight_date,
+		flightDate,
 		origin: apiFlight.departure.iata,
 		destination: apiFlight.arrival.iata,
 		scheduledDeparture: apiFlight.departure.scheduled,
 		scheduledArrival: apiFlight.arrival.scheduled,
-		currentStatus: apiFlight.flight_status,
-		gate: apiFlight.departure.gate || undefined,
-		terminal: apiFlight.departure.terminal || undefined,
+		currentStatus: normalizedStatus,
+		gate: shouldIncludeStandInfo ? apiFlight.departure.gate || undefined : undefined,
+		terminal: shouldIncludeStandInfo ? apiFlight.departure.terminal || undefined : undefined,
 		delayMinutes,
 	};
 }

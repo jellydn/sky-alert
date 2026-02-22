@@ -97,6 +97,7 @@ describe("track handler", () => {
 			getFlightByNumberAndDate: mock(() => Promise.resolve(null)),
 			createFlight: mock(() => Promise.resolve(1)),
 			trackFlight: mock(() => Promise.resolve(true)),
+			updateFlightById: mock(() => Promise.resolve()),
 		}));
 
 		mock.module("../utils/pending-selections.js", () => ({

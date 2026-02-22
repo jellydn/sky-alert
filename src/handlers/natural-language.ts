@@ -1,7 +1,8 @@
 import type { Context } from "grammy";
 import { bot } from "../bot/instance.js";
 import { aviationstackApi } from "../services/aviationstack.js";
-import { handleApiError } from "../utils/api-error-handler.js";
+import { getFlightByNumberAndDate } from "../services/flight-service.js";
+import { handleApiError, isExpectedApiError } from "../utils/api-error-handler.js";
 import { parseFlightInput } from "../utils/flight-parser.js";
 import { formatFlightListMessage } from "../utils/format-flight-list.js";
 import { logger } from "../utils/logger.js";
@@ -10,7 +11,7 @@ import {
 	getPendingSelection,
 	setPendingSelection,
 } from "../utils/pending-selections.js";
-import { saveAndConfirmFlight } from "./track.js";
+import { saveAndConfirmFlight, saveAndConfirmStoredFlight } from "./track.js";
 
 const SELECTION_EXPIRED_MESSAGE =
 	"❓ Selection expired or invalid.\n\n" +
@@ -63,9 +64,14 @@ bot.on("message:text", async (ctx: Context) => {
 
 			await ctx.reply(flightList, { parse_mode: "Markdown" });
 
-			setPendingSelection(chatId, limitedFlights);
+			setPendingSelection(chatId, limitedFlights, date);
 		} catch (error) {
-			logger.error("Error looking up flights:", error);
+			if (isExpectedApiError(error)) {
+				const reason = error instanceof Error ? error.message : String(error);
+				logger.warn(`Route lookup failed: ${reason}`);
+			} else {
+				logger.error("Error looking up flights:", error);
+			}
 			await handleApiError(ctx, error);
 		}
 		return;
@@ -96,9 +102,14 @@ bot.on("message:text", async (ctx: Context) => {
 			clearPendingSelection(chatId);
 
 			try {
-				await saveAndConfirmFlight(ctx, chatId, selectedFlight);
+				await saveAndConfirmFlight(ctx, chatId, selectedFlight, pendingSelection.requestedDate);
 			} catch (error) {
-				logger.error("Error tracking flight:", error);
+				if (isExpectedApiError(error)) {
+					const reason = error instanceof Error ? error.message : String(error);
+					logger.warn(`Track request failed: ${reason}`);
+				} else {
+					logger.error("Error tracking flight:", error);
+				}
 				await handleApiError(ctx, error);
 			}
 			return;
@@ -113,6 +124,12 @@ bot.on("message:text", async (ctx: Context) => {
 		await ctx.reply("🔍 Looking up flight...");
 
 		try {
+			const storedFlight = await getFlightByNumberAndDate(parsed.flightNumber, parsed.date);
+			if (storedFlight) {
+				await saveAndConfirmStoredFlight(ctx, chatId, storedFlight.id);
+				return;
+			}
+
 			const apiFlights = await aviationstackApi.getFlightsByNumber(
 				parsed.flightNumber,
 				parsed.date,
@@ -131,13 +148,18 @@ bot.on("message:text", async (ctx: Context) => {
 				const limitedFlights = apiFlights.slice(0, 5);
 				const message = formatFlightListMessage(limitedFlights, parsed.flightNumber);
 				await ctx.reply(message, { parse_mode: "Markdown" });
-				setPendingSelection(chatId, limitedFlights);
+				setPendingSelection(chatId, limitedFlights, parsed.date);
 				return;
 			}
 
-			await saveAndConfirmFlight(ctx, chatId, apiFlights[0]);
+			await saveAndConfirmFlight(ctx, chatId, apiFlights[0], parsed.date);
 		} catch (error) {
-			logger.error("Error tracking flight:", error);
+			if (isExpectedApiError(error)) {
+				const reason = error instanceof Error ? error.message : String(error);
+				logger.warn(`Track request failed: ${reason}`);
+			} else {
+				logger.error("Error tracking flight:", error);
+			}
 			await handleApiError(ctx, error);
 		}
 	} else if (parsed.flightNumber && !parsed.date) {

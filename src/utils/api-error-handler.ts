@@ -1,5 +1,15 @@
 import type { Context } from "grammy";
 
+const EXPECTED_API_ERRORS = new Set([
+	"Monthly API budget exceeded",
+	"Rate limit exceeded",
+	"Invalid API key",
+]);
+
+export function isExpectedApiError(error: unknown): boolean {
+	return error instanceof Error && EXPECTED_API_ERRORS.has(error.message);
+}
+
 export async function handleApiError(ctx: Context, error: unknown): Promise<void> {
 	if (!(error instanceof Error)) {
 		await ctx.reply("❌ An unexpected error occurred. Please try again later.");

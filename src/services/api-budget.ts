@@ -5,6 +5,10 @@ import { apiUsage } from "../db/schema.js";
 const FREE_TIER_LIMIT = 100;
 const BUDGET_RESERVE = 5;
 
+interface RequestBudgetOptions {
+	allowReserve?: boolean;
+}
+
 function getCurrentMonth(): string {
 	const now = new Date();
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -37,9 +41,10 @@ export async function getUsage(): Promise<{
 	};
 }
 
-export async function canMakeRequest(): Promise<boolean> {
+export async function canMakeRequest(options?: RequestBudgetOptions): Promise<boolean> {
 	const { remaining } = await getUsage();
-	return remaining > BUDGET_RESERVE;
+	const reserve = options?.allowReserve ? 0 : BUDGET_RESERVE;
+	return remaining > reserve;
 }
 
 export async function recordRequest(): Promise<void> {
@@ -50,6 +55,18 @@ export async function recordRequest(): Promise<void> {
 		.update(apiUsage)
 		.set({
 			requestCount: sql`${apiUsage.requestCount} + 1`,
+			lastRequestAt: new Date(),
+		})
+		.where(eq(apiUsage.month, month));
+}
+
+export async function markUsageLimitReached(): Promise<void> {
+	const month = getCurrentMonth();
+	await getOrCreateMonthRecord();
+	await db
+		.update(apiUsage)
+		.set({
+			requestCount: FREE_TIER_LIMIT,
 			lastRequestAt: new Date(),
 		})
 		.where(eq(apiUsage.month, month));

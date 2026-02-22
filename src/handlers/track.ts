@@ -7,9 +7,11 @@ import {
 	createFlight,
 	getFlightByNumberAndDate,
 	trackFlight,
+	updateFlightById,
 } from "../services/flight-service.js";
-import { handleApiError } from "../utils/api-error-handler.js";
+import { handleApiError, isExpectedApiError } from "../utils/api-error-handler.js";
 import { parseDate } from "../utils/flight-parser.js";
+import { shouldUseDepartureStandInfo } from "../utils/flight-status.js";
 import { formatFlightListMessage } from "../utils/format-flight-list.js";
 import { formatTime } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
@@ -40,6 +42,12 @@ bot.command("track", async (ctx: Context) => {
 	try {
 		await ctx.reply("🔍 Looking up flight...");
 
+		const storedFlight = await getFlightByNumberAndDate(flightNumber, date);
+		if (storedFlight) {
+			await saveAndConfirmStoredFlight(ctx, chatId, storedFlight.id);
+			return;
+		}
+
 		const apiFlights = await aviationstackApi.getFlightsByNumber(flightNumber, date);
 
 		if (apiFlights.length === 0) {
@@ -60,23 +68,64 @@ bot.command("track", async (ctx: Context) => {
 			const message = formatFlightListMessage(limitedFlights, flightNumber);
 
 			await ctx.reply(message, { parse_mode: "Markdown" });
-			setPendingSelection(chatId, limitedFlights);
+			setPendingSelection(chatId, limitedFlights, date);
 			return;
 		}
 
-		await saveAndConfirmFlight(ctx, chatId, apiFlights[0]);
+		await saveAndConfirmFlight(ctx, chatId, apiFlights[0], date);
 	} catch (error) {
-		logger.error("Error tracking flight:", error);
+		if (isExpectedApiError(error)) {
+			const reason = error instanceof Error ? error.message : String(error);
+			logger.warn(`Track request failed: ${reason}`);
+		} else {
+			logger.error("Error tracking flight:", error);
+		}
 		await handleApiError(ctx, error);
 	}
 });
+
+export async function saveAndConfirmStoredFlight(
+	ctx: Context,
+	chatId: string,
+	flightId: number,
+): Promise<void> {
+	const { getFlightById } = await import("../services/flight-service.js");
+	const flight = await getFlightById(flightId);
+	if (!flight) {
+		await ctx.reply("❌ Failed to load saved flight details");
+		return;
+	}
+
+	const insertedTracking = await trackFlight(chatId, flightId);
+	const trackingNote = insertedTracking ? "" : "ℹ️ You were already tracking this flight.\n\n";
+	const shouldShowStandInfo = shouldUseDepartureStandInfo(
+		flight.scheduledDeparture,
+		flight.flightDate,
+		flight.currentStatus || undefined,
+	);
+
+	await ctx.reply(
+		`${trackingNote}✅ *Flight Tracked Successfully*\n\n` +
+			`✈️ ${flight.flightNumber}\n` +
+			"Cached flight data\n\n" +
+			`📍 Route: ${flight.origin} → ${flight.destination}\n` +
+			`📅 Date: ${flight.flightDate}\n\n` +
+			`🛫 Departure: ${formatTime(flight.scheduledDeparture)} (${flight.origin})\n` +
+			`🛬 Arrival: ${formatTime(flight.scheduledArrival)} (${flight.destination})\n\n` +
+			`📊 Status: ${flight.currentStatus || "unknown"}\n` +
+			`${shouldShowStandInfo && flight.gate ? `🚪 Gate: ${flight.gate}\n` : ""}` +
+			`${shouldShowStandInfo && flight.terminal ? `🏢 Terminal: ${flight.terminal}\n` : ""}`,
+		{ parse_mode: "Markdown" },
+	);
+}
 
 export async function saveAndConfirmFlight(
 	ctx: Context,
 	chatId: string,
 	apiFlight: AviationstackFlight,
+	requestedDate?: string,
 ): Promise<void> {
-	const flightInput = convertAviationstackFlight(apiFlight);
+	const flightInput = convertAviationstackFlight(apiFlight, requestedDate);
 
 	const existingFlight = await getFlightByNumberAndDate(
 		flightInput.flightNumber,
@@ -87,6 +136,7 @@ export async function saveAndConfirmFlight(
 
 	if (existingFlight) {
 		flightId = existingFlight.id;
+		await updateFlightById(flightId, flightInput);
 	} else {
 		const createdId = await createFlight(flightInput);
 		if (!createdId) {
@@ -96,21 +146,20 @@ export async function saveAndConfirmFlight(
 		flightId = createdId;
 	}
 
-	const alreadyTracking = await trackFlight(chatId, flightId);
-
-	const trackingNote = alreadyTracking ? "ℹ️ You were already tracking this flight.\n\n" : "";
+	const insertedTracking = await trackFlight(chatId, flightId);
+	const trackingNote = insertedTracking ? "" : "ℹ️ You were already tracking this flight.\n\n";
 
 	await ctx.reply(
 		`${trackingNote}✅ *Flight Tracked Successfully*\n\n` +
 			`✈️ ${flightInput.flightNumber}\n` +
-			`${apiFlight.airline.name}\n\n` +
+			`${apiFlight.airline?.name ?? "Unknown airline"}\n\n` +
 			`📍 Route: ${flightInput.origin} → ${flightInput.destination}\n` +
 			`📅 Date: ${flightInput.flightDate}\n\n` +
 			`🛫 Departure: ${formatTime(apiFlight.departure.scheduled)} (${flightInput.origin})\n` +
 			`🛬 Arrival: ${formatTime(apiFlight.arrival.scheduled)} (${flightInput.destination})\n\n` +
-			`📊 Status: ${apiFlight.flight_status}\n` +
-			`${apiFlight.departure.gate ? `🚪 Gate: ${apiFlight.departure.gate}\n` : ""}` +
-			`${apiFlight.departure.terminal ? `🏢 Terminal: ${apiFlight.departure.terminal}\n` : ""}`,
+			`📊 Status: ${flightInput.currentStatus || "unknown"}\n` +
+			`${flightInput.gate ? `🚪 Gate: ${flightInput.gate}\n` : ""}` +
+			`${flightInput.terminal ? `🏢 Terminal: ${flightInput.terminal}\n` : ""}`,
 		{ parse_mode: "Markdown" },
 	);
 }

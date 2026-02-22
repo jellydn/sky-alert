@@ -4,7 +4,9 @@ import { db } from "../db/index.js";
 import { flights, statusChanges, trackedFlights } from "../db/schema.js";
 import {
 	isTerminalFlightStatus,
+	normalizeOperationalStatus,
 	preferKnownStatus,
+	shouldUseDepartureStandInfo,
 	shouldUseStatusFallback,
 } from "../utils/flight-status.js";
 import { logger } from "../utils/logger.js";
@@ -115,10 +117,31 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 		if (!apiFlight) {
 			return;
 		}
+		const nowMs = Date.now();
 		let nextDelayMinutes = getDelayMinutes(apiFlight);
-		let nextStatus = preferKnownStatus(flight.currentStatus || undefined, apiFlight.flight_status);
-		let nextGate = apiFlight.departure.gate || undefined;
-		let nextTerminal = apiFlight.departure.terminal || undefined;
+		let nextStatus = preferKnownStatus(
+			flight.currentStatus || undefined,
+			normalizeOperationalStatus(
+				apiFlight.flight_status,
+				apiFlight.departure.scheduled,
+				flight.flightDate,
+				nowMs,
+				apiFlight.flight_date,
+			),
+		);
+		let shouldIncludeStandInfo = shouldUseDepartureStandInfo(
+			apiFlight.departure.scheduled,
+			flight.flightDate,
+			nextStatus,
+			nowMs,
+		);
+		let nextGate = flight.gate || undefined;
+		let nextTerminal = shouldIncludeStandInfo
+			? apiFlight.departure.terminal || undefined
+			: flight.terminal || undefined;
+		if (shouldIncludeStandInfo && apiFlight.departure.gate) {
+			nextGate = apiFlight.departure.gate;
+		}
 		let flightStatsFallbackUsed = false;
 
 		if (shouldUseStatusFallback(nextStatus, nextDelayMinutes)) {
@@ -136,12 +159,26 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 					nextDelayMinutes = flightStatsFallback.delayMinutes;
 				}
 				if (flightStatsFallback.status && shouldUseStatusFallback(nextStatus, nextDelayMinutes)) {
-					nextStatus = preferKnownStatus(nextStatus, flightStatsFallback.status);
+					nextStatus = preferKnownStatus(
+						nextStatus,
+						normalizeOperationalStatus(
+							flightStatsFallback.status,
+							flight.scheduledDeparture,
+							flight.flightDate,
+							nowMs,
+						),
+					);
+					shouldIncludeStandInfo = shouldUseDepartureStandInfo(
+						apiFlight.departure.scheduled,
+						flight.flightDate,
+						nextStatus,
+						nowMs,
+					);
 				}
-				if (flightStatsFallback.departureGate) {
+				if (shouldIncludeStandInfo && flightStatsFallback.departureGate) {
 					nextGate = flightStatsFallback.departureGate;
 				}
-				if (flightStatsFallback.departureTerminal) {
+				if (shouldIncludeStandInfo && flightStatsFallback.departureTerminal) {
 					nextTerminal = flightStatsFallback.departureTerminal;
 				}
 			}
@@ -151,31 +188,58 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 					[apiFlight.flight.icao, apiFlight.flight.iata, flightNumber],
 					flight.origin,
 					flight.destination,
+					flight.scheduledDeparture,
 				);
 				if (fallback?.delayMinutes && fallback.delayMinutes > 0) {
 					nextDelayMinutes = fallback.delayMinutes;
 				}
 				if (fallback?.status && shouldUseStatusFallback(nextStatus, nextDelayMinutes)) {
-					nextStatus = preferKnownStatus(nextStatus, fallback.status);
+					nextStatus = preferKnownStatus(
+						nextStatus,
+						normalizeOperationalStatus(
+							fallback.status,
+							flight.scheduledDeparture,
+							flight.flightDate,
+							nowMs,
+						),
+					);
+					shouldIncludeStandInfo = shouldUseDepartureStandInfo(
+						apiFlight.departure.scheduled,
+						flight.flightDate,
+						nextStatus,
+						nowMs,
+					);
+				}
+				if (shouldIncludeStandInfo && fallback?.departureGate) {
+					nextGate = fallback.departureGate;
+				}
+				if (shouldIncludeStandInfo && fallback?.departureTerminal) {
+					nextTerminal = fallback.departureTerminal;
 				}
 			}
 		}
 
 		const finalStatus = preferKnownStatus(flight.currentStatus || undefined, nextStatus);
-		const isTerminalStatus = isTerminalFlightStatus(finalStatus);
+		const normalizedFinalStatus = normalizeOperationalStatus(
+			finalStatus,
+			flight.scheduledDeparture,
+			flight.flightDate,
+			nowMs,
+		);
+		const isTerminalStatus = isTerminalFlightStatus(normalizedFinalStatus);
 
 		const changes: { field: string; from: string; to: string }[] = [];
 
-		if (flight.currentStatus !== finalStatus && finalStatus) {
+		if (flight.currentStatus !== normalizedFinalStatus && normalizedFinalStatus) {
 			changes.push({
 				field: "Status",
 				from: flight.currentStatus || "N/A",
-				to: finalStatus,
+				to: normalizedFinalStatus,
 			});
 			await db.insert(statusChanges).values({
 				flightId,
 				oldStatus: flight.currentStatus,
-				newStatus: finalStatus,
+				newStatus: normalizedFinalStatus,
 			});
 		}
 
@@ -228,7 +292,7 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 		await db
 			.update(flights)
 			.set({
-				currentStatus: finalStatus,
+				currentStatus: normalizedFinalStatus,
 				gate: nextGate,
 				terminal: nextTerminal,
 				delayMinutes: nextDelayMinutes,

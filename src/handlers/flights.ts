@@ -3,6 +3,7 @@ import type { Context } from "grammy";
 import { bot } from "../bot/instance.js";
 import { db } from "../db/index.js";
 import { flights, trackedFlights } from "../db/schema.js";
+import { normalizeOperationalStatus, shouldUseDepartureStandInfo } from "../utils/flight-status.js";
 import { formatTime } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
 
@@ -24,6 +25,8 @@ bot.command("flights", async (ctx: Context) => {
 				destination: flights.destination,
 				scheduledDeparture: flights.scheduledDeparture,
 				currentStatus: flights.currentStatus,
+				gate: flights.gate,
+				terminal: flights.terminal,
 			})
 			.from(trackedFlights)
 			.innerJoin(flights, eq(trackedFlights.flightId, flights.id))
@@ -52,8 +55,24 @@ bot.command("flights", async (ctx: Context) => {
 			message += `   ${flight.origin} → ${flight.destination}\n`;
 			message += `   📅 ${flight.flightDate}\n`;
 			message += `   🛫 ${formatTime(flight.scheduledDeparture)} (${flight.origin})\n`;
-			if (flight.currentStatus) {
-				message += `   📊 ${flight.currentStatus}\n`;
+			const normalizedStatus = normalizeOperationalStatus(
+				flight.currentStatus || undefined,
+				flight.scheduledDeparture,
+				flight.flightDate,
+			);
+			if (normalizedStatus) {
+				message += `   📊 ${normalizedStatus}\n`;
+			}
+			const shouldShowStandInfo = shouldUseDepartureStandInfo(
+				flight.scheduledDeparture,
+				flight.flightDate,
+				normalizedStatus,
+			);
+			if (shouldShowStandInfo && flight.gate) {
+				message += `   🚪 Gate: ${flight.gate}\n`;
+			}
+			if (shouldShowStandInfo && flight.terminal) {
+				message += `   🏢 Terminal: ${flight.terminal}\n`;
 			}
 			message += "\n";
 		}

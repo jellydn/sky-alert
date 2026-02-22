@@ -3,7 +3,7 @@ import type { AviationstackFlight } from "./aviationstack.js";
 
 process.env.AVIATIONSTACK_API_KEY = "test-api-key-123";
 
-const { AviationstackAPI } = await import("./aviationstack.js");
+const { AviationstackAPI, flightMatchesRequestedDate } = await import("./aviationstack.js");
 
 const mockApiResponse = {
 	pagination: { limit: 100, offset: 0, count: 1, total: 1 },
@@ -80,50 +80,31 @@ describe("AviationstackAPI", () => {
 	});
 
 	describe("date filtering logic", () => {
-		test("should filter flights by date correctly", () => {
-			const date = "2026-02-19";
-			const responseWithMixedDates = {
-				...mockApiResponse,
-				data: [
-					{ ...mockApiResponse.data[0], flight_date: "2026-02-19" },
-					{ ...mockApiResponse.data[0], flight_date: "2026-02-20" },
-				],
-			};
-
-			const matching = responseWithMixedDates.data.filter((f) => f.flight_date === date);
-
-			expect(matching).toHaveLength(1);
-			expect(matching[0].flight_date).toBe(date);
+		test("should match when flight_date exactly matches", () => {
+			expect(flightMatchesRequestedDate(mockApiResponse.data[0], "2026-02-19")).toBe(true);
 		});
 
-		test("should return all flights when all match date", () => {
-			const date = "2026-02-19";
-			const responseWithSameDates = {
-				...mockApiResponse,
-				data: [
-					{ ...mockApiResponse.data[0], flight_date: "2026-02-19" },
-					{ ...mockApiResponse.data[0], flight_date: "2026-02-19" },
-				],
+		test("should match by departure local date when UTC flight_date differs", () => {
+			const flight = {
+				...mockApiResponse.data[0],
+				flight_date: "2026-02-21",
+				departure: {
+					...mockApiResponse.data[0].departure,
+					timezone: "Asia/Ho_Chi_Minh",
+					scheduled: "2026-02-21T19:55:00+00:00",
+				},
+				arrival: {
+					...mockApiResponse.data[0].arrival,
+					timezone: "Asia/Bangkok",
+					scheduled: "2026-02-21T21:45:00+00:00",
+				},
 			};
 
-			const matching = responseWithSameDates.data.filter((f) => f.flight_date === date);
-
-			expect(matching).toHaveLength(2);
+			expect(flightMatchesRequestedDate(flight, "2026-02-22")).toBe(true);
 		});
 
-		test("should return empty array when no flights match date", () => {
-			const date = "2026-02-19";
-			const responseWithDifferentDates = {
-				...mockApiResponse,
-				data: [
-					{ ...mockApiResponse.data[0], flight_date: "2026-02-20" },
-					{ ...mockApiResponse.data[0], flight_date: "2026-02-21" },
-				],
-			};
-
-			const matching = responseWithDifferentDates.data.filter((f) => f.flight_date === date);
-
-			expect(matching).toHaveLength(0);
+		test("should return false when no date representation matches", () => {
+			expect(flightMatchesRequestedDate(mockApiResponse.data[0], "2026-02-21")).toBe(false);
 		});
 	});
 

@@ -1,5 +1,14 @@
 const LOW_SIGNAL_STATUSES = new Set(["scheduled", "unknown", "n/a", "na", "unavailable"]);
 const TERMINAL_STATUSES = new Set(["landed", "cancelled", "canceled", "arrived", "completed"]);
+const PROGRESS_LIKE_STATUSES = new Set(["active", "departed", "landed", "arrived", "completed"]);
+const GATE_INFO_WINDOW_MS = 6 * 60 * 60 * 1000;
+const STATUS_ALIASES: Record<string, string> = {
+	canceled: "cancelled",
+	"in-air": "departed",
+	in_air: "departed",
+	enroute: "departed",
+	"en-route": "departed",
+};
 
 export function normalizeFlightStatus(status?: string): string | undefined {
 	if (!status) {
@@ -7,7 +16,98 @@ export function normalizeFlightStatus(status?: string): string | undefined {
 	}
 
 	const normalized = status.trim().toLowerCase();
-	return normalized.length > 0 ? normalized : undefined;
+	if (normalized.length === 0) {
+		return undefined;
+	}
+
+	return STATUS_ALIASES[normalized] ?? normalized;
+}
+
+export function normalizeOperationalStatus(
+	status?: string,
+	scheduledDepartureIso?: string,
+	flightDate?: string,
+	nowMs = Date.now(),
+	sourceFlightDate?: string,
+): string | undefined {
+	const normalized = normalizeFlightStatus(status);
+	if (!normalized) {
+		return undefined;
+	}
+	const scheduledSourceDate = scheduledDepartureIso?.split("T")[0];
+	if (
+		scheduledSourceDate &&
+		flightDate &&
+		scheduledSourceDate < flightDate &&
+		PROGRESS_LIKE_STATUSES.has(normalized)
+	) {
+		return "scheduled";
+	}
+	if (
+		sourceFlightDate &&
+		flightDate &&
+		sourceFlightDate < flightDate &&
+		PROGRESS_LIKE_STATUSES.has(normalized)
+	) {
+		return "scheduled";
+	}
+
+	if (flightDate) {
+		const today = todayDateString(nowMs);
+		if (flightDate > today && PROGRESS_LIKE_STATUSES.has(normalized)) {
+			return "scheduled";
+		}
+	}
+
+	if (scheduledDepartureIso) {
+		const departureMs = Date.parse(scheduledDepartureIso);
+		if (!Number.isNaN(departureMs) && departureMs > nowMs) {
+			if (PROGRESS_LIKE_STATUSES.has(normalized)) {
+				return "scheduled";
+			}
+		}
+	}
+
+	return normalized;
+}
+
+export function shouldUseDepartureStandInfo(
+	scheduledDepartureIso?: string,
+	flightDate?: string,
+	status?: string,
+	nowMs = Date.now(),
+): boolean {
+	const normalizedStatus = normalizeFlightStatus(status);
+	if (normalizedStatus === "scheduled") {
+		return false;
+	}
+
+	if (flightDate) {
+		const today = todayDateString(nowMs);
+
+		// If user is tracking a future calendar day, gate/terminal is usually stale.
+		if (flightDate > today) {
+			return false;
+		}
+	}
+
+	if (!scheduledDepartureIso) {
+		return true;
+	}
+
+	const departureMs = Date.parse(scheduledDepartureIso);
+	if (Number.isNaN(departureMs)) {
+		return true;
+	}
+
+	return departureMs - nowMs <= GATE_INFO_WINDOW_MS;
+}
+
+function todayDateString(nowMs: number): string {
+	const now = new Date(nowMs);
+	return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(
+		now.getUTCDate(),
+	).padStart(2, "0")}`;
 }
 
 export function isLowSignalStatus(status?: string): boolean {
@@ -20,7 +120,13 @@ export function isLowSignalStatus(status?: string): boolean {
 }
 
 export function shouldUseStatusFallback(status?: string, delayMinutes?: number): boolean {
-	return (!delayMinutes || delayMinutes <= 0) && isLowSignalStatus(status);
+	const normalized = normalizeFlightStatus(status);
+	const hasNoDelaySignal = !delayMinutes || delayMinutes <= 0;
+	if (!hasNoDelaySignal) {
+		return false;
+	}
+
+	return normalized === "delayed" || isLowSignalStatus(normalized);
 }
 
 export function isTerminalFlightStatus(status?: string): boolean {

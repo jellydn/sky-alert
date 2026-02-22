@@ -3,6 +3,7 @@ import type { AviationstackFlight } from "../services/aviationstack.js";
 interface PendingRouteSelection {
 	chatId: string;
 	flights: AviationstackFlight[];
+	requestedDate?: string;
 	timestamp: number;
 }
 
@@ -10,10 +11,15 @@ const pendingSelections = new Map<string, PendingRouteSelection>();
 
 const SELECTION_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
-export function setPendingSelection(chatId: string, flights: AviationstackFlight[]) {
+export function setPendingSelection(
+	chatId: string,
+	flights: AviationstackFlight[],
+	requestedDate?: string,
+) {
 	pendingSelections.set(chatId, {
 		chatId,
 		flights,
+		requestedDate,
 		timestamp: Date.now(),
 	});
 

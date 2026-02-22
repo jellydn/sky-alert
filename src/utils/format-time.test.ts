@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatDateTime, formatTime } from "./format-time.js";
+import { formatDateTime, formatDateTimeForFlightDate, formatTime } from "./format-time.js";
 
 describe("formatTime", () => {
 	test("should format UTC+7 time correctly", () => {
@@ -38,5 +38,22 @@ describe("formatDateTime", () => {
 
 	test("should return --- for invalid string", () => {
 		expect(formatDateTime("invalid")).toBe("---");
+	});
+});
+
+describe("formatDateTimeForFlightDate", () => {
+	test("should prefer flight date when formatting datetime", () => {
+		expect(formatDateTimeForFlightDate("2026-02-21T19:55:00+00:00", "2026-02-22")).toBe(
+			"Feb 22, 7:55 PM",
+		);
+	});
+
+	test("should fallback to iso date when flight date is missing", () => {
+		expect(formatDateTimeForFlightDate("2026-02-21T19:55:00+00:00")).toBe("Feb 21, 7:55 PM");
+	});
+
+	test("should return --- when iso string has no time component", () => {
+		expect(formatDateTimeForFlightDate("2026-02-21")).toBe("---");
+		expect(formatDateTimeForFlightDate("2026-02-21", "2026-02-22")).toBe("---");
 	});
 });

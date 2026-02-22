@@ -2,6 +2,8 @@ import { logger } from "../utils/logger.js";
 
 interface FlightAwareAirport {
 	iata?: string;
+	gate?: string | null;
+	terminal?: string | null;
 }
 
 interface FlightAwareTimes {
@@ -12,9 +14,14 @@ interface FlightAwareTimes {
 interface FlightAwareFlight {
 	origin?: FlightAwareAirport;
 	destination?: FlightAwareAirport;
+	activityLog?: {
+		flights?: FlightAwareFlight[];
+	};
 	flightStatus?: string;
 	cancelled?: boolean;
 	diverted?: boolean;
+	unknown?: boolean;
+	resultUnknown?: boolean;
 	gateDepartureTimes?: FlightAwareTimes;
 	takeoffTimes?: FlightAwareTimes;
 	landingTimes?: FlightAwareTimes;
@@ -28,10 +35,16 @@ interface FlightAwareBootstrap {
 export interface FlightAwareFallbackData {
 	status?: string;
 	delayMinutes?: number;
+	departureGate?: string;
+	departureTerminal?: string;
+	arrivalGate?: string;
+	arrivalTerminal?: string;
+	url?: string;
 	source: "flightaware";
 }
 
 const FLIGHTAWARE_URL = "https://www.flightaware.com/live/flight";
+const ACTIVITY_MATCH_WINDOW_MS = 18 * 60 * 60 * 1000;
 
 function getDelayFromTimes(times?: FlightAwareTimes): number | undefined {
 	if (!times?.estimated || !times?.scheduled) {
@@ -99,10 +112,102 @@ function selectFlight(
 	);
 }
 
+function getBestScheduledSeconds(flight: FlightAwareFlight): number | undefined {
+	return (
+		flight.gateDepartureTimes?.scheduled ||
+		flight.takeoffTimes?.scheduled ||
+		flight.gateArrivalTimes?.scheduled ||
+		flight.landingTimes?.scheduled
+	);
+}
+
+function getSignalScore(flight: FlightAwareFlight): number {
+	let score = 0;
+	const delayMinutes = getDelayMinutes(flight);
+	if (delayMinutes && delayMinutes > 0) {
+		score += 3;
+	}
+	if (flight.flightStatus && flight.flightStatus.trim().length > 0) {
+		score += 2;
+	}
+	if (flight.origin?.gate) {
+		score += 1;
+	}
+	if (flight.origin?.terminal) {
+		score += 1;
+	}
+	if (flight.destination?.gate) {
+		score += 1;
+	}
+	if (flight.destination?.terminal) {
+		score += 1;
+	}
+
+	return score;
+}
+
+function selectBestActivityFlight(
+	flight: FlightAwareFlight,
+	origin: string,
+	destination: string,
+	scheduledDepartureIso?: string,
+): FlightAwareFlight {
+	const candidates = (flight.activityLog?.flights || []).filter(
+		(candidate) => candidate.origin?.iata === origin && candidate.destination?.iata === destination,
+	);
+	if (candidates.length === 0) {
+		return flight;
+	}
+
+	const scheduledDepartureMs = scheduledDepartureIso
+		? Date.parse(scheduledDepartureIso)
+		: Number.NaN;
+	const scopedCandidates =
+		!Number.isNaN(scheduledDepartureMs) && scheduledDepartureMs > 0
+			? candidates.filter((candidate) => {
+					const scheduledSeconds = getBestScheduledSeconds(candidate);
+					if (!scheduledSeconds) {
+						return false;
+					}
+					return (
+						Math.abs(scheduledSeconds * 1000 - scheduledDepartureMs) <= ACTIVITY_MATCH_WINDOW_MS
+					);
+				})
+			: [];
+
+	const rankedCandidates = scopedCandidates.length > 0 ? scopedCandidates : candidates;
+	return rankedCandidates.sort((a, b) => {
+		const scoreDelta = getSignalScore(b) - getSignalScore(a);
+		if (scoreDelta !== 0) {
+			return scoreDelta;
+		}
+
+		if (!Number.isNaN(scheduledDepartureMs)) {
+			const aSeconds = getBestScheduledSeconds(a);
+			const bSeconds = getBestScheduledSeconds(b);
+			if (aSeconds && bSeconds) {
+				return (
+					Math.abs(aSeconds * 1000 - scheduledDepartureMs) -
+					Math.abs(bSeconds * 1000 - scheduledDepartureMs)
+				);
+			}
+			if (aSeconds) {
+				return -1;
+			}
+			if (bSeconds) {
+				return 1;
+			}
+		}
+
+		return 0;
+	})[0];
+}
+
 export async function getFlightAwareFallback(
 	flightNumbers: string[],
 	origin: string,
 	destination: string,
+	scheduledDepartureIso?: string,
 ): Promise<FlightAwareFallbackData | undefined> {
 	for (const flightNumber of flightNumbers) {
 		try {
@@ -127,20 +232,38 @@ export async function getFlightAwareFallback(
 			}
 
 			const selected = selectFlight(Object.values(bootstrap.flights), origin, destination);
-			if (!selected || (selected as { unknown?: boolean }).unknown) {
+			if (!selected || selected.unknown || selected.resultUnknown) {
 				continue;
 			}
+			const selectedActivity = selectBestActivityFlight(
+				selected,
+				origin,
+				destination,
+				scheduledDepartureIso,
+			);
 
-			const delayMinutes = getDelayMinutes(selected);
-			const status = normalizeStatus(selected, delayMinutes);
+			const delayMinutes = getDelayMinutes(selectedActivity);
+			const status = normalizeStatus(selectedActivity, delayMinutes);
 
-			if (!status && !delayMinutes) {
+			if (
+				!status &&
+				!delayMinutes &&
+				!selectedActivity.origin?.gate &&
+				!selectedActivity.origin?.terminal &&
+				!selectedActivity.destination?.gate &&
+				!selectedActivity.destination?.terminal
+			) {
 				continue;
 			}
 
 			return {
 				status,
 				delayMinutes,
+				departureGate: selectedActivity.origin?.gate || undefined,
+				departureTerminal: selectedActivity.origin?.terminal || undefined,
+				arrivalGate: selectedActivity.destination?.gate || undefined,
+				arrivalTerminal: selectedActivity.destination?.terminal || undefined,
+				url: `${FLIGHTAWARE_URL}/${normalizedFlight}`,
 				source: "flightaware",
 			};
 		} catch (error) {
