@@ -120,7 +120,13 @@ export function isLowSignalStatus(status?: string): boolean {
 }
 
 export function shouldUseStatusFallback(status?: string, delayMinutes?: number): boolean {
-	return (!delayMinutes || delayMinutes <= 0) && isLowSignalStatus(status);
+	const normalized = normalizeFlightStatus(status);
+	const hasNoDelaySignal = !delayMinutes || delayMinutes <= 0;
+	if (!hasNoDelaySignal) {
+		return false;
+	}
+
+	return normalized === "delayed" || isLowSignalStatus(normalized);
 }
 
 export function isTerminalFlightStatus(status?: string): boolean {

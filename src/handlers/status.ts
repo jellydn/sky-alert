@@ -15,10 +15,11 @@ import {
 	shouldUseDepartureStandInfo,
 	shouldUseStatusFallback,
 } from "../utils/flight-status.js";
-import { formatDateTime, formatDateTimeForFlightDate } from "../utils/format-time.js";
+import { formatDateTimeForFlightDate } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
 
 const STALE_THRESHOLD = 15 * 60 * 1000; // 15 minutes
+const ESTIMATE_SCHEDULE_DRIFT_THRESHOLD_MS = 18 * 60 * 60 * 1000; // 18 hours
 
 function addMinutesToIso(isoString: string, minutes: number): string | undefined {
 	const baseTimeMs = Date.parse(isoString);
@@ -27,6 +28,27 @@ function addMinutesToIso(isoString: string, minutes: number): string | undefined
 	}
 
 	return new Date(baseTimeMs + minutes * 60 * 1000).toISOString();
+}
+
+function isEstimateNearScheduledTime(estimatedIso: string, scheduledIso: string): boolean {
+	const estimatedMs = Date.parse(estimatedIso);
+	const scheduledMs = Date.parse(scheduledIso);
+	if (Number.isNaN(estimatedMs) || Number.isNaN(scheduledMs)) {
+		return false;
+	}
+
+	return Math.abs(estimatedMs - scheduledMs) <= ESTIMATE_SCHEDULE_DRIFT_THRESHOLD_MS;
+}
+
+function pickTrustedEstimate(
+	estimatedIso: string | undefined,
+	scheduledIso: string,
+): string | undefined {
+	if (!estimatedIso) {
+		return undefined;
+	}
+
+	return isEstimateNearScheduledTime(estimatedIso, scheduledIso) ? estimatedIso : undefined;
 }
 
 function parseCarrierAndNumber(flightCode: string): { carrier?: string; number?: string } {
@@ -76,6 +98,7 @@ bot.command("status", async (ctx: Context) => {
 		let refreshFailed = false;
 		let refreshSkippedForBudget = false;
 		let budgetFallbackUsed = false;
+		let fallbackSourceLink: string | undefined;
 		let liveEstimatedDeparture: string | undefined;
 		let liveEstimatedArrival: string | undefined;
 		let liveArrivalGate: string | undefined;
@@ -189,8 +212,14 @@ bot.command("status", async (ctx: Context) => {
 							if (shouldIncludeStandInfo && flightStatsFallback.departureTerminal) {
 								nextTerminal = flightStatsFallback.departureTerminal;
 							}
-							liveEstimatedDeparture = flightStatsFallback.estimatedDeparture;
-							liveEstimatedArrival = flightStatsFallback.estimatedArrival;
+							liveEstimatedDeparture = pickTrustedEstimate(
+								flightStatsFallback.estimatedDeparture,
+								flight.scheduledDeparture,
+							);
+							liveEstimatedArrival = pickTrustedEstimate(
+								flightStatsFallback.estimatedArrival,
+								flight.scheduledArrival,
+							);
 							liveArrivalGate = flightStatsFallback.arrivalGate;
 							liveArrivalTerminal = flightStatsFallback.arrivalTerminal;
 						}
@@ -200,6 +229,7 @@ bot.command("status", async (ctx: Context) => {
 								[apiFlight.flight.icao, apiFlight.flight.iata, flight.flightNumber],
 								flight.origin,
 								flight.destination,
+								flight.scheduledDeparture,
 							);
 							if (fallback?.delayMinutes && fallback.delayMinutes > 0) {
 								nextDelayMinutes = fallback.delayMinutes;
@@ -213,6 +243,18 @@ bot.command("status", async (ctx: Context) => {
 										flight.flightDate,
 									),
 								);
+							}
+							if (shouldIncludeStandInfo && fallback?.departureGate) {
+								nextGate = fallback.departureGate;
+							}
+							if (shouldIncludeStandInfo && fallback?.departureTerminal) {
+								nextTerminal = fallback.departureTerminal;
+							}
+							if (fallback?.arrivalGate) {
+								liveArrivalGate = fallback.arrivalGate;
+							}
+							if (fallback?.arrivalTerminal) {
+								liveArrivalTerminal = fallback.arrivalTerminal;
 							}
 						}
 					}
@@ -296,11 +338,19 @@ bot.command("status", async (ctx: Context) => {
 					if (shouldIncludeStandInfoFallback && flightStatsFallback?.departureTerminal) {
 						displayDepartureTerminal = flightStatsFallback.departureTerminal;
 					}
-					if (flightStatsFallback?.estimatedDeparture) {
-						liveEstimatedDeparture = flightStatsFallback.estimatedDeparture;
+					const trustedEstimatedDeparture = pickTrustedEstimate(
+						flightStatsFallback?.estimatedDeparture,
+						flight.scheduledDeparture,
+					);
+					const trustedEstimatedArrival = pickTrustedEstimate(
+						flightStatsFallback?.estimatedArrival,
+						flight.scheduledArrival,
+					);
+					if (trustedEstimatedDeparture) {
+						liveEstimatedDeparture = trustedEstimatedDeparture;
 					}
-					if (flightStatsFallback?.estimatedArrival) {
-						liveEstimatedArrival = flightStatsFallback.estimatedArrival;
+					if (trustedEstimatedArrival) {
+						liveEstimatedArrival = trustedEstimatedArrival;
 					}
 					if (flightStatsFallback?.arrivalGate) {
 						liveArrivalGate = flightStatsFallback.arrivalGate;
@@ -312,42 +362,84 @@ bot.command("status", async (ctx: Context) => {
 						refreshSkippedForBudget &&
 						(flightStatsFallback?.status ||
 							(flightStatsFallback?.delayMinutes && flightStatsFallback.delayMinutes > 0) ||
-							flightStatsFallback?.estimatedDeparture ||
-							flightStatsFallback?.estimatedArrival ||
+							trustedEstimatedDeparture ||
+							trustedEstimatedArrival ||
 							flightStatsFallback?.departureGate ||
 							flightStatsFallback?.departureTerminal ||
 							flightStatsFallback?.arrivalGate ||
 							flightStatsFallback?.arrivalTerminal)
 					) {
 						budgetFallbackUsed = true;
+						fallbackSourceLink =
+							fallbackSourceLink ||
+							`https://www.flightstats.com/v2/flight-tracker/${parsedCode.carrier}/${parsedCode.number}`;
 					}
 				} catch (error) {
 					logger.debug(`FlightStats display enrichment failed for ${flight.flightNumber}:`, error);
 				}
 			}
 		}
-		if (refreshSkippedForBudget && shouldUseStatusFallback(displayStatus, displayDelayMinutes)) {
+		if (refreshSkippedForBudget) {
 			try {
 				const fallback = await getFlightAwareFallback(
 					buildFlightAwareCandidates(flight.flightNumber),
 					flight.origin,
 					flight.destination,
+					flight.scheduledDeparture,
 				);
-				if (fallback?.delayMinutes && fallback.delayMinutes > 0) {
+				const shouldPreferFallbackDelay =
+					!!fallback?.delayMinutes &&
+					fallback.delayMinutes > 0 &&
+					(!displayDelayMinutes || fallback.delayMinutes > displayDelayMinutes);
+				if (shouldPreferFallbackDelay && fallback?.delayMinutes) {
 					displayDelayMinutes = fallback.delayMinutes;
 					budgetFallbackUsed = true;
 				}
 				if (fallback?.status) {
+					const shouldPreferFallbackStatus =
+						shouldPreferFallbackDelay ||
+						shouldUseStatusFallback(displayStatus, displayDelayMinutes);
 					displayStatus =
-						preferKnownStatus(
-							displayStatus,
-							normalizeOperationalStatus(
-								fallback.status,
-								flight.scheduledDeparture,
-								flight.flightDate,
-							),
-						) || "";
+						(shouldPreferFallbackStatus
+							? preferKnownStatus(
+									displayStatus,
+									normalizeOperationalStatus(
+										fallback.status,
+										flight.scheduledDeparture,
+										flight.flightDate,
+									),
+								)
+							: displayStatus) || "";
+					if (shouldPreferFallbackStatus) {
+						budgetFallbackUsed = true;
+					}
+				}
+				if (
+					shouldIncludeStandInfoFallback &&
+					fallback?.departureGate &&
+					(shouldPreferFallbackDelay || !displayDepartureGate)
+				) {
+					displayDepartureGate = fallback.departureGate;
 					budgetFallbackUsed = true;
+				}
+				if (
+					shouldIncludeStandInfoFallback &&
+					fallback?.departureTerminal &&
+					(shouldPreferFallbackDelay || !displayDepartureTerminal)
+				) {
+					displayDepartureTerminal = fallback.departureTerminal;
+					budgetFallbackUsed = true;
+				}
+				if (fallback?.arrivalGate && (shouldPreferFallbackDelay || !liveArrivalGate)) {
+					liveArrivalGate = fallback.arrivalGate;
+					budgetFallbackUsed = true;
+				}
+				if (fallback?.arrivalTerminal && (shouldPreferFallbackDelay || !liveArrivalTerminal)) {
+					liveArrivalTerminal = fallback.arrivalTerminal;
+					budgetFallbackUsed = true;
+				}
+				if (fallback?.url) {
+					fallbackSourceLink = fallback.url;
 				}
 			} catch (error) {
 				logger.debug(`FlightAware display enrichment failed for ${flight.flightNumber}:`, error);
@@ -400,11 +492,17 @@ bot.command("status", async (ctx: Context) => {
 			flight.flightDate,
 		)} (${flight.origin})\n`;
 		if (liveEstimatedDeparture) {
-			message += `   Estimated: ${formatDateTime(liveEstimatedDeparture)} (${flight.origin})\n`;
+			message += `   Estimated: ${formatDateTimeForFlightDate(
+				liveEstimatedDeparture,
+				flight.flightDate,
+			)} (${flight.origin})\n`;
 		} else if (displayDelayMinutes && displayDelayMinutes > 0) {
 			const estimatedDeparture = addMinutesToIso(flight.scheduledDeparture, displayDelayMinutes);
 			if (estimatedDeparture) {
-				message += `   Estimated: ${formatDateTime(estimatedDeparture)} (${flight.origin})\n`;
+				message += `   Estimated: ${formatDateTimeForFlightDate(
+					estimatedDeparture,
+					flight.flightDate,
+				)} (${flight.origin})\n`;
 			}
 		}
 
@@ -436,11 +534,17 @@ bot.command("status", async (ctx: Context) => {
 			flight.flightDate,
 		)} (${flight.destination})\n`;
 		if (liveEstimatedArrival) {
-			message += `   Estimated: ${formatDateTime(liveEstimatedArrival)} (${flight.destination})\n`;
+			message += `   Estimated: ${formatDateTimeForFlightDate(
+				liveEstimatedArrival,
+				flight.flightDate,
+			)} (${flight.destination})\n`;
 		} else if (displayDelayMinutes && displayDelayMinutes > 0) {
 			const estimatedArrival = addMinutesToIso(flight.scheduledArrival, displayDelayMinutes);
 			if (estimatedArrival) {
-				message += `   Estimated: ${formatDateTime(estimatedArrival)} (${flight.destination})\n`;
+				message += `   Estimated: ${formatDateTimeForFlightDate(
+					estimatedArrival,
+					flight.flightDate,
+				)} (${flight.destination})\n`;
 			}
 		}
 		if (liveArrivalGate) {
@@ -495,6 +599,9 @@ bot.command("status", async (ctx: Context) => {
 			if (budgetFallbackUsed) {
 				message +=
 					"\n_⚠️ Live Aviationstack refresh skipped: monthly budget reached. Showing web fallback data._";
+				if (fallbackSourceLink) {
+					message += `\n🔗 More live details: ${fallbackSourceLink}`;
+				}
 			} else {
 				message += "\n_⚠️ Live refresh skipped: monthly API budget reached. Showing cached data._";
 			}

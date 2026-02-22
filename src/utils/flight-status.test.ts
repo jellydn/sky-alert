@@ -124,6 +124,14 @@ describe("flight-status utilities", () => {
 		expect(shouldUseStatusFallback("scheduled", 20)).toBe(false);
 	});
 
+	test("shouldUseStatusFallback is true for delayed without delay minutes", () => {
+		expect(shouldUseStatusFallback("delayed", undefined)).toBe(true);
+	});
+
+	test("shouldUseStatusFallback is false for delayed with positive delay minutes", () => {
+		expect(shouldUseStatusFallback("delayed", 25)).toBe(false);
+	});
+
 	test("preferKnownStatus avoids downgrading known status to unknown", () => {
 		expect(preferKnownStatus("scheduled", "unknown")).toBe("scheduled");
 		expect(preferKnownStatus("departed", "unknown")).toBe("departed");

@@ -188,6 +188,7 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 					[apiFlight.flight.icao, apiFlight.flight.iata, flightNumber],
 					flight.origin,
 					flight.destination,
+					flight.scheduledDeparture,
 				);
 				if (fallback?.delayMinutes && fallback.delayMinutes > 0) {
 					nextDelayMinutes = fallback.delayMinutes;
@@ -208,6 +209,12 @@ async function pollFlight(flightId: number, flightNumber: string, flightDate: st
 						nextStatus,
 						nowMs,
 					);
+				}
+				if (shouldIncludeStandInfo && fallback?.departureGate) {
+					nextGate = fallback.departureGate;
+				}
+				if (shouldIncludeStandInfo && fallback?.departureTerminal) {
+					nextTerminal = fallback.departureTerminal;
 				}
 			}
 		}
