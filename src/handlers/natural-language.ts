@@ -1,6 +1,7 @@
 import type { Context } from "grammy";
 import { bot } from "../bot/instance.js";
 import { aviationstackApi } from "../services/aviationstack.js";
+import { getFlightByNumberAndDate } from "../services/flight-service.js";
 import { handleApiError, isExpectedApiError } from "../utils/api-error-handler.js";
 import { parseFlightInput } from "../utils/flight-parser.js";
 import { formatFlightListMessage } from "../utils/format-flight-list.js";
@@ -10,7 +11,7 @@ import {
 	getPendingSelection,
 	setPendingSelection,
 } from "../utils/pending-selections.js";
-import { saveAndConfirmFlight } from "./track.js";
+import { saveAndConfirmFlight, saveAndConfirmStoredFlight } from "./track.js";
 
 const SELECTION_EXPIRED_MESSAGE =
 	"❓ Selection expired or invalid.\n\n" +
@@ -123,6 +124,12 @@ bot.on("message:text", async (ctx: Context) => {
 		await ctx.reply("🔍 Looking up flight...");
 
 		try {
+			const storedFlight = await getFlightByNumberAndDate(parsed.flightNumber, parsed.date);
+			if (storedFlight) {
+				await saveAndConfirmStoredFlight(ctx, chatId, storedFlight.id);
+				return;
+			}
+
 			const apiFlights = await aviationstackApi.getFlightsByNumber(
 				parsed.flightNumber,
 				parsed.date,

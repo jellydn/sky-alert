@@ -11,6 +11,7 @@ import {
 } from "../services/flight-service.js";
 import { handleApiError, isExpectedApiError } from "../utils/api-error-handler.js";
 import { parseDate } from "../utils/flight-parser.js";
+import { shouldUseDepartureStandInfo } from "../utils/flight-status.js";
 import { formatFlightListMessage } from "../utils/format-flight-list.js";
 import { formatTime } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
@@ -40,6 +41,12 @@ bot.command("track", async (ctx: Context) => {
 
 	try {
 		await ctx.reply("🔍 Looking up flight...");
+
+		const storedFlight = await getFlightByNumberAndDate(flightNumber, date);
+		if (storedFlight) {
+			await saveAndConfirmStoredFlight(ctx, chatId, storedFlight.id);
+			return;
+		}
 
 		const apiFlights = await aviationstackApi.getFlightsByNumber(flightNumber, date);
 
@@ -76,6 +83,41 @@ bot.command("track", async (ctx: Context) => {
 		await handleApiError(ctx, error);
 	}
 });
+
+export async function saveAndConfirmStoredFlight(
+	ctx: Context,
+	chatId: string,
+	flightId: number,
+): Promise<void> {
+	const { getFlightById } = await import("../services/flight-service.js");
+	const flight = await getFlightById(flightId);
+	if (!flight) {
+		await ctx.reply("❌ Failed to load saved flight details");
+		return;
+	}
+
+	const insertedTracking = await trackFlight(chatId, flightId);
+	const trackingNote = insertedTracking ? "" : "ℹ️ You were already tracking this flight.\n\n";
+	const shouldShowStandInfo = shouldUseDepartureStandInfo(
+		flight.scheduledDeparture,
+		flight.flightDate,
+		flight.currentStatus || undefined,
+	);
+
+	await ctx.reply(
+		`${trackingNote}✅ *Flight Tracked Successfully*\n\n` +
+			`✈️ ${flight.flightNumber}\n` +
+			"Cached flight data\n\n" +
+			`📍 Route: ${flight.origin} → ${flight.destination}\n` +
+			`📅 Date: ${flight.flightDate}\n\n` +
+			`🛫 Departure: ${formatTime(flight.scheduledDeparture)} (${flight.origin})\n` +
+			`🛬 Arrival: ${formatTime(flight.scheduledArrival)} (${flight.destination})\n\n` +
+			`📊 Status: ${flight.currentStatus || "unknown"}\n` +
+			`${shouldShowStandInfo && flight.gate ? `🚪 Gate: ${flight.gate}\n` : ""}` +
+			`${shouldShowStandInfo && flight.terminal ? `🏢 Terminal: ${flight.terminal}\n` : ""}`,
+		{ parse_mode: "Markdown" },
+	);
+}
 
 export async function saveAndConfirmFlight(
 	ctx: Context,
