@@ -119,6 +119,8 @@ bot.command("status", async (ctx: Context) => {
 							apiFlight.flight_status,
 							apiFlight.departure.scheduled,
 							flight.flightDate,
+							Date.now(),
+							apiFlight.flight_date,
 						),
 					);
 					const shouldIncludeStandInfo = shouldUseDepartureStandInfo(
@@ -194,7 +196,11 @@ bot.command("status", async (ctx: Context) => {
 						}
 					}
 					const oldStatus = flight.currentStatus;
-					const finalStatus = preferKnownStatus(oldStatus || undefined, newStatus);
+					const finalStatus = normalizeOperationalStatus(
+						preferKnownStatus(oldStatus || undefined, newStatus),
+						flight.scheduledDeparture,
+						flight.flightDate,
+					);
 					const isTerminalStatus = isTerminalFlightStatus(finalStatus);
 
 					if (oldStatus !== finalStatus && finalStatus) {
@@ -286,9 +292,10 @@ bot.command("status", async (ctx: Context) => {
 			}
 		}
 
-		const finalDisplayStatus = preferKnownStatus(
-			flight.currentStatus || undefined,
-			displayStatus || undefined,
+		const finalDisplayStatus = normalizeOperationalStatus(
+			preferKnownStatus(flight.currentStatus || undefined, displayStatus || undefined),
+			flight.scheduledDeparture,
+			flight.flightDate,
 		);
 		if (finalDisplayStatus && finalDisplayStatus !== (flight.currentStatus || undefined)) {
 			await db.insert(statusChanges).values({

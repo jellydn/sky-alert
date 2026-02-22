@@ -11,7 +11,6 @@ import {
 } from "../services/flight-service.js";
 import { handleApiError } from "../utils/api-error-handler.js";
 import { parseDate } from "../utils/flight-parser.js";
-import { normalizeOperationalStatus } from "../utils/flight-status.js";
 import { formatFlightListMessage } from "../utils/format-flight-list.js";
 import { formatTime } from "../utils/format-time.js";
 import { logger } from "../utils/logger.js";
@@ -111,13 +110,7 @@ export async function saveAndConfirmFlight(
 			`📅 Date: ${flightInput.flightDate}\n\n` +
 			`🛫 Departure: ${formatTime(apiFlight.departure.scheduled)} (${flightInput.origin})\n` +
 			`🛬 Arrival: ${formatTime(apiFlight.arrival.scheduled)} (${flightInput.destination})\n\n` +
-			`📊 Status: ${
-				normalizeOperationalStatus(
-					apiFlight.flight_status,
-					apiFlight.departure.scheduled,
-					flightInput.flightDate,
-				) || "unknown"
-			}\n` +
+			`📊 Status: ${flightInput.currentStatus || "unknown"}\n` +
 			`${flightInput.gate ? `🚪 Gate: ${flightInput.gate}\n` : ""}` +
 			`${flightInput.terminal ? `🏢 Terminal: ${flightInput.terminal}\n` : ""}`,
 		{ parse_mode: "Markdown" },
