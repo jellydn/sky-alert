@@ -9,7 +9,7 @@ import {
 	trackFlight,
 	updateFlightById,
 } from "../services/flight-service.js";
-import { handleApiError } from "../utils/api-error-handler.js";
+import { handleApiError, isExpectedApiError } from "../utils/api-error-handler.js";
 import { parseDate } from "../utils/flight-parser.js";
 import { formatFlightListMessage } from "../utils/format-flight-list.js";
 import { formatTime } from "../utils/format-time.js";
@@ -67,7 +67,12 @@ bot.command("track", async (ctx: Context) => {
 
 		await saveAndConfirmFlight(ctx, chatId, apiFlights[0], date);
 	} catch (error) {
-		logger.error("Error tracking flight:", error);
+		if (isExpectedApiError(error)) {
+			const reason = error instanceof Error ? error.message : String(error);
+			logger.warn(`Track request failed: ${reason}`);
+		} else {
+			logger.error("Error tracking flight:", error);
+		}
 		await handleApiError(ctx, error);
 	}
 });

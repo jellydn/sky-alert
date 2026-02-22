@@ -1,7 +1,7 @@
 import type { Context } from "grammy";
 import { bot } from "../bot/instance.js";
 import { aviationstackApi } from "../services/aviationstack.js";
-import { handleApiError } from "../utils/api-error-handler.js";
+import { handleApiError, isExpectedApiError } from "../utils/api-error-handler.js";
 import { parseFlightInput } from "../utils/flight-parser.js";
 import { formatFlightListMessage } from "../utils/format-flight-list.js";
 import { logger } from "../utils/logger.js";
@@ -65,7 +65,12 @@ bot.on("message:text", async (ctx: Context) => {
 
 			setPendingSelection(chatId, limitedFlights, date);
 		} catch (error) {
-			logger.error("Error looking up flights:", error);
+			if (isExpectedApiError(error)) {
+				const reason = error instanceof Error ? error.message : String(error);
+				logger.warn(`Route lookup failed: ${reason}`);
+			} else {
+				logger.error("Error looking up flights:", error);
+			}
 			await handleApiError(ctx, error);
 		}
 		return;
@@ -98,7 +103,12 @@ bot.on("message:text", async (ctx: Context) => {
 			try {
 				await saveAndConfirmFlight(ctx, chatId, selectedFlight, pendingSelection.requestedDate);
 			} catch (error) {
-				logger.error("Error tracking flight:", error);
+				if (isExpectedApiError(error)) {
+					const reason = error instanceof Error ? error.message : String(error);
+					logger.warn(`Track request failed: ${reason}`);
+				} else {
+					logger.error("Error tracking flight:", error);
+				}
 				await handleApiError(ctx, error);
 			}
 			return;
@@ -137,7 +147,12 @@ bot.on("message:text", async (ctx: Context) => {
 
 			await saveAndConfirmFlight(ctx, chatId, apiFlights[0], parsed.date);
 		} catch (error) {
-			logger.error("Error tracking flight:", error);
+			if (isExpectedApiError(error)) {
+				const reason = error instanceof Error ? error.message : String(error);
+				logger.warn(`Track request failed: ${reason}`);
+			} else {
+				logger.error("Error tracking flight:", error);
+			}
 			await handleApiError(ctx, error);
 		}
 	} else if (parsed.flightNumber && !parsed.date) {
