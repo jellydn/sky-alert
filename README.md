@@ -41,6 +41,16 @@ cp .env.example .env
 bun run start
 ```
 
+## Deployment
+
+Ready to deploy your bot? Check out the [**Hosting Guide**](HOSTING.md) for detailed instructions on deploying to:
+
+- **Fly.io** (recommended) — with persistent SQLite volume
+- **Render** — simple deployment with disk storage
+- **Railway** — easy setup with volume support
+
+The guide covers environment variables, database persistence, and troubleshooting.
+
 ## Develop
 
 ```bash
