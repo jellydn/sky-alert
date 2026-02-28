@@ -35,6 +35,13 @@ SkyAlert uses SQLite with the database file stored at `./data/sky-alert.db`. Eac
 
 ## Deployment Options
 
+> **Note:** SkyAlert is a **background worker** (not a web service). It uses Telegram's long-polling API via grammY to receive messages. This means:
+>
+> - No HTTP server is exposed
+> - The process runs continuously in the background
+> - Use "worker" or "background" service types, not "web" services
+> - Health checks via HTTP paths will fail (already fixed in configurations below)
+
 ### Option 1: Fly.io (Recommended)
 
 Fly.io offers excellent support for persistent volumes and runs Bun natively.
@@ -60,6 +67,8 @@ fly auth login
 
 #### 3. Create `fly.toml` in your project root
 
+**Important:** SkyAlert is a background worker (not a web service) that uses long-polling via grammY. It does not expose an HTTP server, so we don't use `[http_service]`. The container runs continuously as a persistent machine.
+
 ```toml
 app = "sky-alert"
 primary_region = "sin"  # Change to your preferred region (sin, iad, lhr, etc.)
@@ -70,13 +79,7 @@ primary_region = "sin"  # Change to your preferred region (sin, iad, lhr, etc.)
 [env]
   LOG_LEVEL = "info"
 
-[http_service]
-  internal_port = 8080
-  force_https = true
-  auto_stop_machines = false
-  auto_start_machines = false
-  min_machines_running = 1
-
+# Background worker configuration - keeps machine running continuously
 [[vm]]
   memory = '256mb'
   cpu_kind = 'shared'
@@ -155,9 +158,11 @@ Render provides simple deployment with persistent disks.
 
 #### 1. Create `render.yaml` (optional, for infrastructure as code)
 
+**Important:** Use `type: worker` (not `web`) since SkyAlert is a background process using long-polling, not an HTTP server.
+
 ```yaml
 services:
-  - type: web
+  - type: worker
     name: sky-alert
     runtime: docker
     plan: starter
@@ -225,7 +230,7 @@ CMD ["sh", "-c", "bun run db:migrate && bun run start"]
 
 ### Option 3: Railway
 
-Railway offers straightforward deployment with volume support.
+Railway offers straightforward deployment with volume support for background workers.
 
 #### 1. Install Railway CLI (optional)
 
@@ -303,7 +308,7 @@ railway up
 
 ### Option 4: Dokku (Self-Hosted)
 
-Dokku is an open-source PaaS that runs on your own server. It's great for self-hosting with persistent storage.
+Dokku is an open-source PaaS that runs on your own server. It's great for self-hosting background workers with persistent storage.
 
 #### Prerequisites
 
