@@ -14,11 +14,11 @@ Before deploying, you'll need:
 
 All platforms need these environment variables configured:
 
-| Variable                | Description                                                  | Example                           |
-| ----------------------- | ------------------------------------------------------------ | --------------------------------- |
+| Variable                | Description                                                  | Example                            |
+| ----------------------- | ------------------------------------------------------------ | ---------------------------------- |
 | `BOT_TOKEN`             | Telegram bot token from [@BotFather](https://t.me/BotFather) | `1234567890:ABCdefGHIjklMNOpqr...` |
-| `AVIATIONSTACK_API_KEY` | API key from [aviationstack.com](https://aviationstack.com/) | `abc123def456...`                 |
-| `LOG_LEVEL`             | Optional: debug, info, warn, error (default: info)          | `info`                            |
+| `AVIATIONSTACK_API_KEY` | API key from [aviationstack.com](https://aviationstack.com/) | `abc123def456...`                  |
+| `LOG_LEVEL`             | Optional: debug, info, warn, error (default: info)           | `info`                             |
 
 ## Database Persistence
 
@@ -245,8 +245,6 @@ railway login
   },
   "deploy": {
     "startCommand": "bun run db:migrate && bun run start",
-    "healthcheckPath": "/",
-    "healthcheckTimeout": 100,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
@@ -300,6 +298,93 @@ railway up
 - Monitor with `railway logs`
 - Volumes are automatically backed up
 - Use Railway's built-in metrics for monitoring
+
+---
+
+### Option 4: Dokku (Self-Hosted)
+
+Dokku is an open-source PaaS that runs on your own server. It's great for self-hosting with persistent storage.
+
+#### Prerequisites
+
+1. A server with Dokku installed (see [Dokku installation](https://dokku.com/docs/getting-started/installation/))
+2. Persistent storage plugin: `dokku plugin:install https://github.com/dokku/dokku-psql.git` (optional, or use bind mounts)
+3. Docker registry or direct git push setup
+
+#### 1. Create the App
+
+On your Dokku server:
+
+```bash
+dokku apps:create sky-alert
+```
+
+#### 2. Configure Persistent Storage
+
+SkyAlert needs persistent storage for SQLite:
+
+```bash
+# Create storage directory on host
+mkdir -p /var/lib/dokku/data/storage/sky-alert
+
+# Mount it to /app/data in the container
+dokku storage:mount sky-alert /var/lib/dokku/data/storage/sky-alert:/app/data
+```
+
+#### 3. Set Environment Variables
+
+```bash
+dokku config:set sky-alert BOT_TOKEN="your_telegram_bot_token"
+dokku config:set sky-alert AVIATIONSTACK_API_KEY="your_aviationstack_api_key"
+dokku config:set sky-alert LOG_LEVEL="info"
+```
+
+#### 4. Deploy
+
+From your local machine:
+
+```bash
+# Add dokku remote (replace with your server)
+git remote add dokku dokku@your-server:sky-alert
+
+# Deploy
+git push dokku main
+```
+
+Or deploy via Docker image:
+
+```bash
+# Build locally
+docker build -t sky-alert:latest .
+
+# Tag and push to registry
+docker tag sky-alert:latest your-registry/sky-alert:latest
+docker push your-registry/sky-alert:latest
+
+# Deploy on dokku server
+dokku git:from-image sky-alert your-registry/sky-alert:latest
+```
+
+#### 5. Verify Deployment
+
+```bash
+# Check app status
+dokku ps:report sky-alert
+
+# View logs
+dokku logs sky-alert -t
+
+# Enter container
+dokku enter sky-alert
+```
+
+#### Tips for Dokku
+
+- **Logs**: Use `dokku logs sky-alert -t` for real-time logs
+- **SSH Access**: `dokku enter sky-alert` to access the container
+- **Restart**: `dokku ps:restart sky-alert`
+- **Backup Storage**: The host directory `/var/lib/dokku/data/storage/sky-alert` contains your database - back this up regularly
+- **Multiple Instances**: If you need high availability, use a shared database instead of SQLite (PostgreSQL with Drizzle adapter)
 
 ---
 
@@ -388,11 +473,11 @@ After deployment:
 
 ## Cost Estimates (as of 2026)
 
-| Platform | Minimum Plan  | Storage | Total/month |
-| -------- | ------------- | ------- | ----------- |
+| Platform | Minimum Plan       | Storage  | Total/month                              |
+| -------- | ------------------ | -------- | ---------------------------------------- |
 | Fly.io   | Free tier + volume | $0.15/GB | ~$0.15 (or $1.94 if using shared-cpu-1x) |
-| Render   | Starter | Included | $7 |
-| Railway  | Hobby | $0.25/GB | ~$5 + storage |
+| Render   | Starter            | Included | $7                                       |
+| Railway  | Hobby              | $0.25/GB | ~$5 + storage                            |
 
 **Note**: Fly.io free tier might require occasional manual scaling. For production, consider a paid plan for better reliability.
 
