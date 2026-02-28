@@ -28,5 +28,4 @@ npm-debug.log*
 Thumbs.db
 
 # Drizzle
-drizzle/meta/
 .claude/settings.local.json

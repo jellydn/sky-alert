@@ -46,4 +46,4 @@ Thumbs.db
 *.test.ts
 
 # Drizzle meta
-drizzle/meta/
+# drizzle/meta/
